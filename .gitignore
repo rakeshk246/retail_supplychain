@@ -1,0 +1,24 @@
+# Environments
+.env
+
+# Python Caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Databases
+chroma_db/
+*.sqlite3
+
+# Large Data Files
+data/*.csv
+data/*.zip
+
+# IDEs
+.idea/
+.vscode/
+
+# Other temporary files
+agentic_results.json
+xai_audit_trail.json
