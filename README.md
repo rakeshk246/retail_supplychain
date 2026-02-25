@@ -6,6 +6,8 @@ An advanced agentic supply chain simulation built with **LangGraph**, **Groq LLM
 ![LLM via Groq](https://img.shields.io/badge/LLM-Groq_%7C_Llama_3-f59e0b?style=for-the-badge)
 ![LangGraph](https://img.shields.io/badge/Orchestrator-LangGraph-059669?style=for-the-badge)
 
+🚀 **Live Demo:** [Play with the Agentic Supply Chain Simulator here!](https://retailsupplychain-a2b3hdk5s49ucflvhzc8pk.streamlit.app/)
+
 ## 🌟 Key Features
 
 *   **🤖 Multi-Agent System:** Distinct AI agents (Demand, Warehouse, Logistics, Supplier) with specialized roles.
