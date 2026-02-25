@@ -12,7 +12,6 @@ chroma_db/
 *.sqlite3
 
 # Large Data Files
-data/*.csv
 data/*.zip
 
 # IDEs
