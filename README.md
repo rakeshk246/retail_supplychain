@@ -1,3 +1,10 @@
+---
+title: Retail Supply Chain AI Simulator
+app_file: streamlit_app.py
+sdk: streamlit
+sdk_version: 1.42.0
+---
+
 # 🛍️ AI-Powered Supply Chain Simulator
 
 An advanced agentic supply chain simulation built with **LangGraph**, **Groq LLMs**, **ChromaDB**, and **Streamlit**. This project models a retail supply chain (Supplier → Logistics → Warehouse → Customer) where autonomous AI agents negotiate, communicate, and make decisions to fulfill customer demand while minimizing costs.
