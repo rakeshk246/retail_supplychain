@@ -117,6 +117,12 @@ class OrchestratedSupplyChainModel(Model):
         self._last_workflow_path = "none"
         self._workflow = self._build_workflow()
 
+        # Phase 5: Human-in-the-Loop (HITL)
+        self.hitl_threshold = 400  # Orders >= this need human approval
+        self.hitl_pending = None   # Stores pending approval: {'qty': int, 'path': str, 'day': int}
+        self.hitl_enabled = True
+        self.last_order_qty = 0    # Track last order quantity for HITL
+
     # =========================================================================
     # LangGraph Workflow Definition
     # =========================================================================
@@ -321,6 +327,20 @@ class OrchestratedSupplyChainModel(Model):
                 ]
             )
 
+        # HITL check: if order is large, flag for human approval
+        if order_qty >= self.hitl_threshold and self.hitl_enabled:
+            self.last_order_qty = order_qty
+            self.hitl_pending = {
+                'qty': order_qty, 'path': 'NORMAL', 'day': self.current_day,
+                'reason': f'Normal reorder of {order_qty} units exceeds threshold of {self.hitl_threshold}'
+            }
+            self.log_event("HITL", f"⚠️ Order of {order_qty} units requires human approval")
+            return {
+                'order_placed': False,
+                'order_result': {},
+                'workflow_path': 'NORMAL'
+            }
+
         return {
             'order_placed': order_qty > 0,
             'order_result': {'quantity': order_qty} if order_qty > 0 else {},
@@ -367,6 +387,20 @@ class OrchestratedSupplyChainModel(Model):
 
         self.log_event("Orchestrator", f"EMERGENCY path: ordering {order_qty} units")
 
+        # HITL check for emergency orders
+        if order_qty >= self.hitl_threshold and self.hitl_enabled:
+            self.last_order_qty = order_qty
+            self.hitl_pending = {
+                'qty': order_qty, 'path': 'EMERGENCY', 'day': self.current_day,
+                'reason': f'Emergency reorder of {order_qty} units exceeds threshold of {self.hitl_threshold}'
+            }
+            self.log_event("HITL", f"⚠️ Emergency order of {order_qty} units requires human approval")
+            return {
+                'order_placed': False,
+                'order_result': {},
+                'workflow_path': 'EMERGENCY'
+            }
+
         return {
             'order_placed': order_qty > 0,
             'order_result': {'quantity': order_qty},
@@ -411,6 +445,20 @@ class OrchestratedSupplyChainModel(Model):
         )
 
         self.log_event("Orchestrator", f"CRISIS path: maximum order {order_qty} units")
+
+        # HITL check for crisis orders
+        if order_qty >= self.hitl_threshold and self.hitl_enabled:
+            self.last_order_qty = order_qty
+            self.hitl_pending = {
+                'qty': order_qty, 'path': 'CRISIS', 'day': self.current_day,
+                'reason': f'Crisis order of {order_qty} units exceeds threshold of {self.hitl_threshold}'
+            }
+            self.log_event("HITL", f"⚠️ Crisis order of {order_qty} units requires human approval")
+            return {
+                'order_placed': False,
+                'order_result': {},
+                'workflow_path': 'CRISIS'
+            }
 
         return {
             'order_placed': order_qty > 0,
@@ -550,6 +598,51 @@ class OrchestratedSupplyChainModel(Model):
         # Run the workflow
         result = self._workflow.invoke(initial_state)
         self._last_workflow_path = result.get('workflow_path', 'NORMAL')
+
+    def approve_hitl_order(self):
+        """Human approves the pending HITL order. Processes it immediately."""
+        if not self.hitl_pending:
+            return False
+        pending = self.hitl_pending
+        self.hitl_pending = None
+        qty = pending['qty']
+
+        # Process the order through supplier
+        result = self.supplier.process_order(qty)
+        if result and isinstance(result, dict) and result.get('quantity', 0) > 0:
+            self.logistics.schedule_shipment(result)
+            self.log_event("HITL", f"✅ Human APPROVED order of {qty} units")
+
+            # XAI record
+            rec = self.xai.create_record("Human", "hitl_approval", self.current_day)
+            rec.action = f"Approved order of {qty} units"
+            rec.set_why(
+                reasoning="Human manager approved large order after review",
+                summary=f"Manager approved {qty}-unit {pending['path']} order",
+                factors=[pending['reason']]
+            )
+            rec.confidence = 1.0
+            return True
+        return False
+
+    def deny_hitl_order(self):
+        """Human denies the pending HITL order."""
+        if not self.hitl_pending:
+            return False
+        pending = self.hitl_pending
+        self.hitl_pending = None
+        self.log_event("HITL", f"❌ Human DENIED order of {pending['qty']} units")
+
+        # XAI record
+        rec = self.xai.create_record("Human", "hitl_denial", self.current_day)
+        rec.action = f"Denied order of {pending['qty']} units"
+        rec.set_why(
+            reasoning="Human manager denied large order after review",
+            summary=f"Manager denied {pending['qty']}-unit {pending['path']} order",
+            factors=[pending['reason']]
+        )
+        rec.confidence = 1.0
+        return True
 
     # =========================================================================
     # Standard Model Methods

@@ -27,6 +27,13 @@ except ImportError:
 from memory import AgentMemory
 from message_bus import MessageBus, Message
 
+# Phase 5: Real-time intelligence (weather + news + LLM analysis)
+try:
+    from news_search import get_intelligence_analyzer
+    HAS_INTEL = True
+except ImportError:
+    HAS_INTEL = False
+
 
 # ==============================================================================
 # LLM Engine
@@ -682,8 +689,53 @@ class AgenticDemandAgent(Agent):
         self.bus = MessageBus.get_instance()
         self.last_reasoning = None
         self.recent_demands = []
+        # Phase 5: Intelligence analyzer (weather + news + LLM)
+        self.intel = get_intelligence_analyzer() if HAS_INTEL else None
+        self.last_analysis = None
 
     def step(self):
+        # Phase 5: Gather weather + news intelligence (every 5 days or day 1)
+        if self.intel and (self.model.current_day % 5 == 1 or self.model.current_day == 1):
+            try:
+                analysis = self.intel.analyze_with_llm(
+                    self.llm_engine, self.model.current_day
+                )
+                self.last_analysis = analysis
+
+                # Apply supply chain impacts
+                reliability_adj = analysis.get('reliability_adjustment', 0)
+                if reliability_adj < 0:
+                    original_rel = self.model.supplier.reliability
+                    self.model.supplier.reliability = max(
+                        0.5, original_rel + reliability_adj
+                    )
+                    self.model.log_event("Intelligence",
+                        f"📡 Risk: {analysis.get('risk_level', '?').upper()} — "
+                        f"Supplier reliability: {original_rel:.0%} → {self.model.supplier.reliability:.0%}")
+
+                # Broadcast intelligence to all agents
+                weather_raw = analysis.get('weather_raw', {})
+                self.bus.broadcast_alert("System", "weather_update", {
+                    'emoji': weather_raw.get('emoji', '🌡️') if weather_raw else '🌡️',
+                    'description': weather_raw.get('description', 'N/A') if weather_raw else 'N/A',
+                    'temperature': weather_raw.get('temperature', 0) if weather_raw else 0,
+                    'severity': weather_raw.get('severity', 'normal') if weather_raw else 'normal',
+                    'impact': analysis.get('weather_impact', 'No data'),
+                    'day': self.model.current_day
+                })
+
+                if analysis.get('risk_level', 'low') != 'low':
+                    self.bus.broadcast_alert("Intelligence", "risk_alert", {
+                        'risk_level': analysis.get('risk_level', 'low'),
+                        'risk_score': analysis.get('risk_score', 0),
+                        'recommendation': analysis.get('recommendation', ''),
+                        'alert_message': analysis.get('alert_message', ''),
+                        'day': self.model.current_day
+                    })
+
+            except Exception as e:
+                print(f"Intelligence step failed: {e}")
+
         try:
             base_prediction = self.forecaster.predict_next()
         except Exception:
@@ -733,6 +785,11 @@ class AgenticDemandAgent(Agent):
             f"Inventory: {self.model.warehouse.inventory}\n\n"
             f"{memory_context}\n\n{bus_context}"
         )
+
+        # Add external intelligence context (weather + news)
+        if self.intel and self.last_analysis:
+            intel_ctx = self.intel.get_context_for_agent_prompt()
+            context += f"\n\n{intel_ctx}"
 
         response = self.llm_engine.reason(DEMAND_SYSTEM_PROMPT, context)
         if response:

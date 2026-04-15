@@ -525,7 +525,8 @@ def main():
             st.warning("⚠️ **Agentic mode requires Groq API.** Set `GROQ_API_KEY` in `.env` file, or switch to `rule_based` mode in the sidebar.")
 
     # =================== HEADER ===================
-    st.title("🤖 Agentic AI Supply Chain")
+    st.title("🤖 Agentic AI Supply Chain: California Grocery Focus")
+    st.markdown("*Managing high-volume bottled water distribution for Walmart CA_1 using real-time Open-Meteo weather intelligence and DuckDuckGo news data.*")
 
     # Score + top metrics
     kpis = st.session_state.kpi.calculate_kpis()
@@ -592,6 +593,22 @@ def main():
         st.session_state.pop('rate_limit_msg', None)
         st.rerun()
 
+
+    # HITL Approval Check
+    if hasattr(model, 'hitl_pending') and model.hitl_pending:
+        pending = model.hitl_pending
+        st.warning(f"⚠️ **APPROVAL REQUIRED:** AI wants to order **{pending['qty']} units** (Reason: {pending.get('reason', 'Exceeds threshold')})")
+        col1, col2 = st.columns(2)
+        if col1.button("✅ Approve Order", type="primary"):
+            model.approve_hitl_order()
+            st.toast("Order Approved!")
+            st.rerun()
+        if col2.button("❌ Deny Order", type="secondary"):
+            model.deny_hitl_order()
+            st.toast("Order Denied!")
+            st.rerun()
+        st.stop()  # Stop execution until approved/denied
+
     # Show rate limit error if it occurred
     if st.session_state.get('rate_limited'):
         st.error(f"""
@@ -610,19 +627,12 @@ def main():
         """)
         st.stop()
 
-    # =================== TABS ===================
-    tab1, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12 = st.tabs([
-        "📖 Day Briefing",
-        "📊 Charts & KPIs",
-        "🧠 Why? (XAI)",
-        "🔀 Workflow",
+    # =================== 4 CONSOLIDATED TABS ===================
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "📊 Live Dashboard",
+        "🧠 AI Brain & Comms",
         "⚔️ AI vs Rules",
-        "📂 Data Explorer",
-        "💰 Cost Analysis",
-        "🏗️ Architecture",
-        "📡 Agent Comms",
-        "🧠 Memory",
-        "🎯 Forecast",
+        "⚙️ Deep Dive & Logs",
     ])
 
     # =================== TAB 1: DAY BRIEFING (all-in-one) ===================
@@ -635,6 +645,59 @@ def main():
             st.markdown("---")
             render_agent_cards(model, st.session_state.rec)
 
+
+            # Weather Intelligence
+            st.markdown("---")
+            st.subheader("☁️ Weather & Intelligence")
+            from news_search import get_intelligence_analyzer
+            intel = get_intelligence_analyzer()
+            data = intel.gather_intelligence(model.current_day)
+            w = data.get('weather')
+            if w:
+                weather_html = f"""
+                <div style="background: linear-gradient(135deg, #1e293b, #0f172a); border-radius: 12px; padding: 20px; color: white; box-shadow: 0 4px 6px rgba(0,0,0,0.3); font-family: -apple-system, system-ui, sans-serif; border: 1px solid #334155;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <div>
+                            <p style="margin: 0 0 5px 0; color: #94a3b8; font-size: 13px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase;">📍 {w.get('location', '')}</p>
+                            <h2 style="margin: 0; font-size: 28px; font-weight: 700; color: #f8fafc;">{w.get('emoji', '☁️')} {w.get('description', '')}</h2>
+                        </div>
+                        <div style="text-align: right;">
+                            <h1 style="margin: 0; font-size: 42px; font-weight: 700; color: #38bdf8;">{w.get('temperature', 0)}°C</h1>
+                            <p style="margin: 5px 0 0 0; color: #94a3b8; font-size: 14px;">Feels like {w.get('feels_like', w.get('temperature', 0))}°C</p>
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; gap: 20px; background: rgba(255,255,255,0.03); padding: 15px; border-radius: 10px; margin-bottom: 20px; border: 1px solid rgba(255,255,255,0.05);">
+                        <div style="flex: 1;">
+                            <div style="color: #94a3b8; font-size: 12px; font-weight: 600; text-transform: uppercase; margin-bottom: 4px;">💨 Wind</div>
+                            <div style="font-size: 18px; font-weight: 600; color: #e2e8f0;">{w.get('wind_speed', 0)} <span style="font-size: 13px; color: #64748b; font-weight: normal;">km/h</span></div>
+                        </div>
+                        <div style="flex: 1; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 20px;">
+                            <div style="color: #94a3b8; font-size: 12px; font-weight: 600; text-transform: uppercase; margin-bottom: 4px;">🌧️ Rain</div>
+                            <div style="font-size: 18px; font-weight: 600; color: #e2e8f0;">{w.get('rain', 0)} <span style="font-size: 13px; color: #64748b; font-weight: normal;">mm</span></div>
+                        </div>
+                        <div style="flex: 1; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 20px;">
+                            <div style="color: #94a3b8; font-size: 12px; font-weight: 600; text-transform: uppercase; margin-bottom: 4px;">⚠️ Impact Risk</div>
+                            <div style="font-size: 16px; font-weight: 700; padding: 2px 8px; border-radius: 4px; display: inline-block; background: {'rgba(239,68,68,0.2)' if w.get('severity') == 'severe' else 'rgba(234,179,8,0.2)' if w.get('severity') == 'moderate' else 'rgba(34,197,94,0.2)'}; color: {'#fca5a5' if w.get('severity') == 'severe' else '#fde047' if w.get('severity') == 'moderate' else '#86efac'}; border: 1px solid {'rgba(239,68,68,0.4)' if w.get('severity') == 'severe' else 'rgba(234,179,8,0.4)' if w.get('severity') == 'moderate' else 'rgba(34,197,94,0.4)'};">{w.get('severity', 'normal').upper()}</div>
+                        </div>
+                    </div>
+                """
+                
+                if w.get('forecast_3day'):
+                    weather_html += '<div style="display: flex; gap: 12px;">'
+                    for fc in w['forecast_3day'][:3]:
+                        weather_html += f"""
+                        <div style="flex: 1; background: rgba(0,0,0,0.3); padding: 12px; border-radius: 8px; text-align: center; border: 1px solid #1e293b;">
+                            <div style="font-size: 12px; color: #cbd5e1; font-weight: 700; text-transform: uppercase;">{fc.get('date', '')[-5:].replace('-','/')}</div>
+                            <div style="font-size: 28px; margin: 8px 0;">{fc.get('emoji', '')}</div>
+                            <div style="font-size: 14px; font-weight: 600; color: #94a3b8;"><span style="color:#e2e8f0">{fc.get('temp_max', '')}°</span> <span style="opacity:0.5">|</span> {fc.get('temp_min', '')}°</div>
+                        </div>
+                        """
+                    weather_html += '</div>'
+                
+                weather_html += '</div>'
+                st.markdown(weather_html, unsafe_allow_html=True)
+            
             # 3. Shipment tracker
             st.subheader("📦 Shipments In Transit")
             render_shipments(model)
@@ -693,8 +756,9 @@ def main():
             - 📈 **Demand Spike** — Suddenly customers want more!
             """)
 
-    # =================== TAB 3: CHARTS ===================
-    with tab3:
+    # =================== CHARTS & KPIs ===================
+    with tab1:
+        st.divider()
         if st.session_state.data:
             # KPIs
             st.header("📊 Key Performance Indicators")
@@ -748,8 +812,8 @@ def main():
         else:
             st.info("Run the simulation to see charts.")
 
-    # =================== TAB 4: XAI ===================
-    with tab4:
+    # =================== WHY? (XAI) ===================
+    with tab2:
         st.header("🧠 Explainable AI — Decision Transparency")
         st.markdown("Understand **why** every decision was made, **who** made it, and **how confident** the system is.")
 
@@ -967,12 +1031,13 @@ def main():
             else:
                 st.error(f"❌ **Low transparency:** {transparency:.0f}%. Many decisions need better explanations.")
 
-    # =================== TAB 5: WORKFLOW ===================
-    with tab5:
+    # =================== WORKFLOW ===================
+    with tab2:
+        st.divider()
         render_workflow(model, st.session_state.data)
 
-    # =================== TAB 6: COMPARISON ===================
-    with tab6:
+    # =================== TAB 3: AI vs RULES COMPARISON ===================
+    with tab3:
         st.header("⚔️ AI Agents vs Simple Rules")
         st.markdown("""
         **Stress Test:** Both systems face the same demand & disruptions.  
@@ -1167,8 +1232,8 @@ def main():
             else:
                 st.info(f"🤝 **Tie!** Both at {af}%")
 
-    # =================== TAB 7: DATA EXPLORER ===================
-    with tab7:
+    # =================== TAB 4: DATA EXPLORER ===================
+    with tab4:
         st.header("📂 Data Explorer — Training Dataset")
 
         dl = st.session_state.dl
@@ -1318,8 +1383,9 @@ def main():
         else:
             st.warning("No data loaded yet. The data will be available after the first simulation step.")
 
-    # =================== TAB 8: COST ANALYSIS ===================
-    with tab8:
+    # =================== COST ANALYSIS ===================
+    with tab4:
+        st.divider()
         st.header("💰 Cost Analysis — Financial Impact")
         st.markdown("Real-time supply chain costs based on simulation data")
 
@@ -1408,8 +1474,9 @@ def main():
         else:
             st.info("▶️ Run the simulation to see cost analysis!")
 
-    # =================== TAB 9: ARCHITECTURE ===================
-    with tab9:
+    # =================== ARCHITECTURE ===================
+    with tab4:
+        st.divider()
         st.header("🏗️ System Architecture")
         st.markdown("Interactive view of how all components connect")
 
@@ -1549,85 +1616,25 @@ def main():
         }
         st.dataframe(pd.DataFrame(tech_data), use_container_width=True, hide_index=True)
 
-    # =================== TAB 10: AGENT COMMUNICATIONS ===================
-    with tab10:
-        st.header("📡 Agent Communications — Message Bus")
-        st.markdown("Real-time view of inter-agent messages")
-
+    # =================== AGENT COMMS ===================
+    with tab2:
+        st.divider()
+        st.header("💬 Live Agent Comms")
+        agent_avatars = {"Supplier": "🏭", "Warehouse": "📦", "Logistics": "🚚", "Demand": "📈", "System": "☁️", "Intel": "🧠"}
         bus = model.bus if hasattr(model, 'bus') else None
-        if bus:
-            stats = bus.get_stats()
-            c1, c2, c3 = st.columns(3)
-            c1.metric("📨 Total Messages", stats.get('total_messages', 0))
-            c2.metric("📬 Active Inboxes", len(stats.get('inbox_sizes', {})))
-            c3.metric("📋 Message Types", len(stats.get('message_types', [])))
-
-            # Message type breakdown
-            if stats.get('message_types'):
-                st.subheader("📊 Message Types")
-                types = stats['message_types']
-                fig_types = go.Figure(data=[go.Bar(
-                    x=list(types.keys()) if isinstance(types, dict) else types,
-                    y=list(types.values()) if isinstance(types, dict) else [1]*len(types),
-                    marker_color='#8b5cf6'
-                )])
-                fig_types.update_layout(height=250, template='plotly_dark',
-                    xaxis_title="Message Type", yaxis_title="Count")
-                st.plotly_chart(fig_types, use_container_width=True)
-
-            # Recent messages
-            st.subheader("💬 Recent Messages")
-            all_messages = []
-            if hasattr(bus, 'history'):
-                for msg in bus.history[-30:]:
-                    all_messages.append({
-                        'From': msg.sender if hasattr(msg, 'sender') else '?',
-                        'To': msg.recipient if hasattr(msg, 'recipient') else '?',
-                        'Type': msg.msg_type if hasattr(msg, 'msg_type') else '?',
-                        'Content': str(msg.content)[:80] if hasattr(msg, 'content') else '?',
-                    })
-            if all_messages:
-                st.dataframe(pd.DataFrame(all_messages), use_container_width=True, hide_index=True)
-            else:
-                # Try to show inbox contents
-                for agent_name in ['Supplier', 'Warehouse', 'Logistics', 'Demand']:
-                    msgs = bus.get_messages(agent_name)
-                    for msg in msgs[-5:]:
-                        all_messages.append({
-                            'To': agent_name,
-                            'From': msg.sender if hasattr(msg, 'sender') else '?',
-                            'Type': msg.msg_type if hasattr(msg, 'msg_type') else '?',
-                            'Content': str(msg.content)[:80] if hasattr(msg, 'content') else '?',
-                        })
-                if all_messages:
-                    st.dataframe(pd.DataFrame(all_messages), use_container_width=True, hide_index=True)
-                else:
-                    st.info("No messages yet. Run a few simulation steps to see agent communication.")
-
-            # Agent communication flow diagram
-            st.subheader("🔄 Communication Flow")
-            flow_html = """
-            <div style="text-align:center; padding:20px; background:#1e293b; border-radius:12px; color:white; font-family:sans-serif;">
-                <div style="display:flex; justify-content:center; align-items:center; gap:10px; flex-wrap:wrap;">
-                    <div style="padding:12px 20px; background:#2563eb; border-radius:8px;">📈 Demand</div>
-                    <div style="font-size:20px;">→ forecast →</div>
-                    <div style="padding:12px 20px; background:#059669; border-radius:8px;">📦 Warehouse</div>
-                    <div style="font-size:20px;">→ order →</div>
-                    <div style="padding:12px 20px; background:#d97706; border-radius:8px;">🏭 Supplier</div>
-                    <div style="font-size:20px;">→ ship →</div>
-                    <div style="padding:12px 20px; background:#7c3aed; border-radius:8px;">🚚 Logistics</div>
-                    <div style="font-size:20px;">→ deliver →</div>
-                    <div style="padding:12px 20px; background:#059669; border-radius:8px;">📦 Warehouse</div>
-                </div>
-                <p style="margin-top:10px; color:#94a3b8;">Each arrow is a message on the bus ↑</p>
-            </div>
-            """
-            components.html(flow_html, height=120)
+        if bus and hasattr(bus, 'history'):
+            for msg in bus.history[-20:]:
+                sender = getattr(msg, 'sender', 'System')
+                content = getattr(msg, 'content', str(msg))
+                with st.chat_message(name=sender, avatar=agent_avatars.get(sender, "🤖")):
+                    st.markdown(f"**@{getattr(msg, 'recipient', 'All')}** — {content}")
         else:
-            st.info("Message bus not available in this mode.")
+            st.info("Message bus not available.")
 
-    # =================== TAB 11: MEMORY EXPLORER ===================
-    with tab11:
+
+    # =================== MEMORY EXPLORER ===================
+    with tab2:
+        st.divider()
         st.header("🧠 Memory Explorer — What Agents Have Learned")
         st.markdown("Agents store past experiences in ChromaDB and recall them for better decisions")
 
@@ -1694,8 +1701,9 @@ def main():
         else:
             st.info("Memory not available. Switch to **agentic** mode for memory features.")
 
-    # =================== TAB 12: FORECAST ACCURACY ===================
-    with tab12:
+    # =================== FORECAST ACCURACY ===================
+    with tab4:
+        st.divider()
         st.header("🎯 Forecast Accuracy — Predicted vs Actual")
         st.markdown("How well is the LSTM model predicting demand?")
 
@@ -1788,6 +1796,15 @@ def main():
 
     # =================== SIDEBAR ===================
     with st.sidebar:
+        st.header("🛑 HITL Settings")
+        hitl_enabled = st.checkbox("Enable Approval Gate", value=True)
+        hitl_threshold = st.slider("Approval Threshold (Units)", 100, 1000, 400, 50)
+        
+        # Apply config
+        if hasattr(model, 'hitl_enabled'):
+            model.hitl_enabled = hitl_enabled
+            model.hitl_threshold = hitl_threshold
+
         st.header("⚙️ Settings")
         new_mode = st.selectbox("AI Mode", ['agentic', 'hybrid', 'rule_based'],
             index=['agentic', 'hybrid', 'rule_based'].index(st.session_state.mode))

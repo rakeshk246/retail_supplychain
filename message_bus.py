@@ -78,6 +78,7 @@ class MessageBus:
     def __init__(self, redis_url: str = None):
         self.redis_client = None
         self.message_log = []
+        self.history = []  # Store Message objects for chat UI
         self.subscribers = defaultdict(list)  # msg_type -> [callbacks]
         self.inbox = defaultdict(list)  # agent_name -> [messages]
         self._total_messages = 0
@@ -118,6 +119,7 @@ class MessageBus:
         """
         self._total_messages += 1
         self.message_log.append(message.to_dict())
+        self.history.append(message)  # Store Message object for chat UI
 
         if self.using_redis:
             try:

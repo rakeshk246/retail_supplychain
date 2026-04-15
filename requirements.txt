@@ -20,5 +20,8 @@ langgraph>=1.0.0
 # Vector memory
 chromadb>=0.4.0
 
+# Real-time news search
+duckduckgo-search>=6.0.0
+
 # Charting extras
 matplotlib>=3.8.2
