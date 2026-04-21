@@ -288,9 +288,22 @@ class AgenticSupplierAgent(Agent):
 
         # Send order confirmation
         if isinstance(result, dict) and result.get('quantity', 0) > 0:
-            self.bus.send_direct("Supplier", "Logistics", "order_confirmation", {
-                'quantity': result['quantity'],
-                'lead_time': result.get('lead_time', self.lead_time),
+            qty = result['quantity']
+            lt = result.get('lead_time', self.lead_time)
+            self.bus.send_direct("Supplier", "Warehouse", "order_confirmation", {
+                'order_qty': qty,
+                'status': 'processing',
+                'available_capacity': self.capacity - qty,
+                'reasoning': self.last_reasoning if self.last_reasoning else "Sufficient capacity to fulfill request.",
+                'action_requested': f"Acknowledge order and prepare receiving docks.",
+                'day': self.model.current_day
+            })
+            self.bus.send_direct("Supplier", "Logistics", "transport_request", {
+                'order_qty': qty,
+                'pickup_ready_in_days': lt,
+                'risk_factor': f"{1.0 - self.reliability:.0%}",
+                'reasoning': self.last_reasoning if self.last_reasoning else "Order processed. Requires transport.",
+                'action_requested': f"Schedule urgent transport slot before 18:00 on Day {self.model.current_day + lt}.",
                 'day': self.model.current_day
             })
 
@@ -373,19 +386,28 @@ class AgenticWarehouseAgent(Agent):
             self.model.stockouts += 1
             self.model.log_event("Warehouse",
                 f"STOCKOUT: {fulfilled}/{demand} (short {demand - fulfilled})")
-            # Alert other agents
+            shortfall = demand - fulfilled
             self.bus.broadcast_alert("Warehouse", "inventory_alert", {
-                'type': 'stockout', 'inventory': self.inventory,
-                'shortfall': demand - fulfilled, 'day': self.model.current_day
+                'type': 'stockout', 
+                'current_inventory': self.inventory,
+                'missed_demand': shortfall,
+                'financial_impact': f"-${shortfall * 45}",
+                'reasoning': "Demand exceeded available stock severely.",
+                'action_requested': "Emergency fulfillment required from supplier. Halt promotions.",
+                'day': self.model.current_day
             })
         else:
             self.model.log_event("Warehouse",
                 f"Fulfilled {fulfilled} | Remaining: {self.inventory}")
-            # Low stock warning
             if self.inventory < self.reorder_point:
                 self.bus.broadcast_alert("Warehouse", "inventory_alert", {
-                    'type': 'low_stock', 'inventory': self.inventory,
-                    'reorder_point': self.reorder_point, 'day': self.model.current_day
+                    'type': 'low_stock', 
+                    'current_inventory': self.inventory,
+                    'reorder_threshold': self.reorder_point,
+                    'buffer_status': f"{(self.inventory / self.reorder_point) * 100:.0f}%",
+                    'reasoning': "Inventory fell below critical threshold.",
+                    'action_requested': "Supplier prepare for incoming high-volume order.",
+                    'day': self.model.current_day
                 })
         return fulfilled
 
@@ -409,8 +431,14 @@ class AgenticWarehouseAgent(Agent):
 
         # Send order request to supplier
         if order_qty > 0:
+            recent_avg = np.mean(self.demand_history[-7:]) if len(self.demand_history) >= 7 else predicted_demand
             self.bus.send_direct("Warehouse", "Supplier", "order_request", {
-                'quantity': order_qty, 'urgency': 'high' if self.inventory < 100 else 'normal',
+                'order_qty': order_qty,
+                'current_inventory': self.inventory,
+                'projected_shortfall': max(0, int((recent_avg * 3) - self.inventory)),
+                'warehouse_utilization': f"{(self.inventory / self.max_capacity) * 100:.0f}%",
+                'reasoning': self.last_reasoning if self.last_reasoning else "Calculated reorder needed based on trends.",
+                'action_requested': f"Confirm and fulfill {order_qty} units within standard lead time.",
                 'day': self.model.current_day
             })
 
@@ -602,9 +630,15 @@ class AgenticLogisticsAgent(Agent):
         )
 
         # Notify warehouse
+        delay_probability = "15% due to weather" if self.status == "disrupted" else "2% nominal"
         self.bus.send_direct("Logistics", "Warehouse", "shipment_update", {
-            'quantity': quantity, 'arrival_day': arrival_day,
-            'status': 'in_transit', 'day': self.model.current_day
+            'qty': quantity, 
+            'eta_days': lead_time,
+            'status': 'in transit', 
+            'delay_risk': delay_probability,
+            'reasoning': self.last_reasoning if self.last_reasoning else "Standard routing applied.",
+            'action_requested': f"Ensure receiving dock is available on Day {arrival_day}.",
+            'day': self.model.current_day
         })
 
         self.model.log_event("Logistics",
@@ -761,11 +795,20 @@ class AgenticDemandAgent(Agent):
         )
 
         # Share forecast with other agents
+        confidence = llm_decision.get('confidence', 0.85) if llm_decision else 0.85
+        last_fc = getattr(self, 'last_forecast', demand)
+        pct_change = ((demand - last_fc) / max(last_fc, 1)) * 100
+        
         self.bus.broadcast_alert("Demand", "demand_forecast", {
-            'predicted_demand': demand,
+            'forecast': demand,
+            'change_vs_last': f"{pct_change:+.1f}%",
             'trend': llm_decision.get('trend', 'stable') if llm_decision else 'stable',
+            'confidence': f"{confidence:.0%}",
+            'reasoning': self.last_reasoning if self.last_reasoning else "Computed by baseline moving average.",
+            'action_requested': "Warehouse: review safety stock. Logistics: ensure capacity.",
             'day': self.model.current_day
         })
+        self.last_forecast = demand
 
         self.model.log_event("Demand", f"Daily demand: {demand} units")
 

@@ -761,8 +761,56 @@ def main():
                 )
                 st.plotly_chart(fig_wf, use_container_width=True)
 
+                # ---- 8. What Happens Tomorrow? ----
+                st.divider()
+                st.subheader("🔮 What Happens Tomorrow?")
+                _avg_dem = model.daily_demand if model.daily_demand > 0 else 100
+                _curr_inv = model.warehouse.inventory
+                _days_left = _curr_inv / max(_avg_dem, 1)
+                _will_ok = _curr_inv > _avg_dem
+                _spare = _curr_inv - _avg_dem
+
+                # Try to get LSTM forecast for tomorrow
+                try:
+                    _tmr_pred = int(st.session_state.fc.predict_next())
+                except Exception:
+                    _tmr_pred = _avg_dem
+
+                _ok_color = "#22c55e" if _will_ok else "#ef4444"
+                _ok_bg    = "rgba(34,197,94,0.1)" if _will_ok else "rgba(239,68,68,0.1)"
+                _ok_label = f"✅ Yes — {_spare} units to spare" if _will_ok else "❌ No — Stockout likely!"
+
+                st.markdown(f"""
+                <div style="background:#1e293b;border-radius:14px;padding:22px 24px;border:1px solid #334155;margin-top:8px">
+                    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:18px">
+                        <div style="flex:1;min-width:140px;background:#0f172a;border-radius:10px;padding:16px;border:1px solid #334155;text-align:center">
+                            <div style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">📈 LSTM Forecast</div>
+                            <div style="font-size:28px;font-weight:800;color:#38bdf8">~{_tmr_pred} units</div>
+                            <div style="font-size:11px;color:#64748b;margin-top:4px">expected demand</div>
+                        </div>
+                        <div style="flex:1;min-width:140px;background:#0f172a;border-radius:10px;padding:16px;border:1px solid #334155;text-align:center">
+                            <div style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">📦 Current Stock</div>
+                            <div style="font-size:28px;font-weight:800;color:#f8fafc">{_curr_inv} units</div>
+                            <div style="font-size:11px;color:#64748b;margin-top:4px">in warehouse now</div>
+                        </div>
+                        <div style="flex:1;min-width:140px;background:#0f172a;border-radius:10px;padding:16px;border:1px solid #334155;text-align:center">
+                            <div style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">⏳ Days of Stock</div>
+                            <div style="font-size:28px;font-weight:800;color:#f59e0b">{_days_left:.1f} days</div>
+                            <div style="font-size:11px;color:#64748b;margin-top:4px">at current pace</div>
+                        </div>
+                        <div style="flex:1;min-width:140px;background:{_ok_bg};border-radius:10px;padding:16px;border:1px solid {_ok_color}40;text-align:center">
+                            <div style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">🎯 Will We Fulfil?</div>
+                            <div style="font-size:15px;font-weight:700;color:{_ok_color};line-height:1.4">{_ok_label}</div>
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+
+
         else:
             # Welcome screen (no simulation run yet)
+
             st.markdown("""
             <div style="text-align:center;padding:60px 20px">
                 <div style="font-size:64px;margin-bottom:16px">🏭</div>
@@ -1031,19 +1079,71 @@ def main():
                 # Support both object attributes and dict keys
                 if isinstance(_m, dict):
                     _s = _m.get('sender', 'System')
-                    _c = _m.get('content', str(_m))
+                    _c = _m.get('content', {})
                     _r = _m.get('recipient', 'all')
                     _day = _m.get('day', '')
+                    _type = _m.get('type', '')
+                    _priority = _m.get('priority', 'normal')
                 else:
                     _s = getattr(_m, 'sender', 'System')
-                    _c = getattr(_m, 'content', str(_m))
+                    _c = getattr(_m, 'content', {})
                     _r = getattr(_m, 'recipient', 'all')
                     _day = getattr(_m, 'day', '')
+                    _type = getattr(_m, 'msg_type', '')
+                    _priority = getattr(_m, 'priority', 'normal')
+                
+                _r_str = "Broadcast (All Agents)" if _r in ['*', 'all', 'All'] else _r
                 _avatar_emoji = _ag_av.get(_s, "🤖")
-                _day_label = f" *(Day {_day})*" if _day else ""
+                
+                # Render fully structural and metric-driven operational logs
+                if isinstance(_c, dict):
+                    _evidence_keys = {k: v for k, v in _c.items() if k not in ['reasoning', 'action_requested', 'day', 'type', 'message']}
+                    _trigger = _c.get('reasoning', _c.get('message', 'Routine analytical update.'))
+                    _action = _c.get('action_requested', 'Acknowledge data and state.')
+                    
+                    if _evidence_keys:
+                        _ev_parts = []
+                        for k, v in _evidence_keys.items():
+                            _ev_parts.append(f"<li style='margin-bottom:3px'><span style='color:#94a3b8;'>{str(k).replace('_', ' ').capitalize()}:</span> <strong style='color:#e2e8f0'>{v}</strong></li>")
+                        _evidence_html = f"<ul style='margin:4px 0 0 0; padding-left:18px;'>{''.join(_ev_parts)}</ul>"
+                    else:
+                        _evidence_html = "<div style='color:#64748b; font-style:italic;'>No numerical payload</div>"
+
+                    _c_html = f"""
+                    <div style='font-size: 13.5px; color: #f8fafc; margin-top: 10px; background: rgba(15,23,42,0.6); padding: 14px 16px; border-radius: 8px; border: 1px solid #1e293b; display: flex; flex-direction: column; gap: 12px;'>
+                        <div>
+                            <div style='color:#38bdf8; font-size:10.5px; font-weight:800; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:4px;'>🎯 Trigger Reason</div>
+                            <div style='line-height:1.5'>{_trigger}</div>
+                        </div>
+                        <div>
+                            <div style='color:#38bdf8; font-size:10.5px; font-weight:800; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:4px;'>📊 Numerical Evidence</div>
+                            {_evidence_html}
+                        </div>
+                        <div>
+                            <div style='color:#38bdf8; font-size:10.5px; font-weight:800; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:4px;'>⚡ Action Requested</div>
+                            <div style='line-height:1.5'>{_action}</div>
+                        </div>
+                    </div>
+                    """
+                else:
+                    _c_html = f"<div style='font-size: 14.5px; color: #f8fafc; margin-top: 6px; line-height: 1.5;'>{str(_c).replace('**', '<strong>')}</div>"
+                
+                _priority_color = "#ef4444" if _priority == "high" else "#38bdf8"
+                _bg_color = "rgba(239,68,68,0.15)" if _priority == "high" else "rgba(56,189,248,0.1)"
+                _type_badge = f"<span style='background: {_bg_color}; color: {_priority_color}; padding: 3px 8px; border-radius: 6px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;'>{_type.replace('_', ' ')}</span>" if _type else ""
+                _day_label = f"<span style='color: #64748b; font-size: 12px; margin-left: auto;'>Day {_day}</span>" if _day else ""
+                
                 with st.chat_message(name=_s, avatar=_avatar_emoji):
-                    st.markdown(f"**{_s}**{_day_label}")
-                    st.markdown(f"@{_r} — {_c}")
+                    st.markdown(f"""
+                    <div style="margin-bottom: 4px; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid #1e293b; padding-bottom: 6px;">
+                        <span style="font-weight: 800; color: #f8fafc; font-size: 15px;">{_s}</span>
+                        <span style="color: #64748b; font-size: 11px;">▶</span>
+                        <span style="font-weight: 600; color: #94a3b8; font-size: 14px;">{_r_str}</span>
+                        {_type_badge}
+                        {_day_label}
+                    </div>
+                    {_c_html}
+                    """, unsafe_allow_html=True)
         else:
             st.markdown("""
             <div style="background:#1e293b;border:1px dashed #334155;border-radius:12px;padding:32px;text-align:center;color:#64748b">
@@ -1055,12 +1155,9 @@ def main():
         # ---- SECTION 4: EXTERNAL INTELLIGENCE ----
         st.divider()
         st.markdown("""
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px">
-            <span style="font-size:28px">🛰️</span>
-            <div>
-                <h2 style="margin:0;font-size:1.5rem">External Intelligence</h2>
-                <p style="margin:0;color:#94a3b8;font-size:13px">Live weather, news, and LLM risk analysis — informs agent decisions</p>
-            </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+            <span style="font-size:26px">🛰️</span>
+            <h2 style="margin:0;font-size:1.5rem;font-weight:700;color:#f8fafc">External Intelligence</h2>
         </div>
         """, unsafe_allow_html=True)
 
@@ -1068,159 +1165,207 @@ def main():
         with _ei2:
             _ref = st.button("🔄 Refresh Intelligence", use_container_width=True, key="t2_intel")
         if _ref or 'intel_cache' not in st.session_state:
-            with st.spinner("Fetching live weather and news..."):
+            with st.spinner("🧠 Fetching live data and running LLM analysis..."):
                 try:
                     from news_search import get_intelligence_analyzer
                     _iao = get_intelligence_analyzer()
-                    st.session_state['intel_cache'] = _iao.gather_intelligence(model.current_day)
+                    # Use the already-initialized LLM singleton (Groq LLaMA)
+                    _llm_eng = LLMEngine.get_instance()
+                    # Gather raw data (weather + news)
+                    _raw = _iao.gather_intelligence(model.current_day, force=True)
+                    # Run REAL LLM analysis — passes actual weather + news to Groq
+                    _llm_result = _iao.analyze_with_llm(_llm_eng, model.current_day)
+                    # Merge raw data + LLM analysis into cache
+                    _cache = {**_raw, 'llm_risk_assessment': _llm_result}
+                    st.session_state['intel_cache'] = _cache
                 except Exception as _ex:
                     st.session_state['intel_cache'] = {}
-                    st.warning(f"Intel fetch failed: {_ex}")
+                    st.warning(f"Intel analysis failed: {_ex}")
+
+
 
         _idat = st.session_state.get('intel_cache', {})
-        _wt = _idat.get('weather', {})
-        _lr = _idat.get('llm_risk_assessment', {})
+        _wt   = _idat.get('weather', {})
+        _lr   = _idat.get('llm_risk_assessment', {})
         _news = _idat.get('news', [])
 
+        # ── WEATHER CARD ─────────────────────────────────────────────────────
         if _wt:
-            _sv = _wt.get('severity', 'normal')
-            _sev_label = _sv.upper()
-            _sc2 = '#22c55e' if _sv == 'normal' else '#eab308' if _sv == 'moderate' else '#ef4444'
-            _sev_bg = 'rgba(34,197,94,0.15)' if _sv == 'normal' else 'rgba(234,179,8,0.15)' if _sv == 'moderate' else 'rgba(239,68,68,0.15)'
-            _temp = _wt.get('temperature', 0)
-            _fl = _wt.get('feels_like', _temp)
-            _desc = _wt.get('description', '')
-            _emoji = _wt.get('emoji', '☁️')
-            _loc = _wt.get('location', 'Los Angeles, California').upper()
-            _wind = _wt.get('wind_speed', 0)
-            _gusts = _wt.get('wind_gusts', _wt.get('gusts', '—'))
-            _rain = _wt.get('rain', 0)
-            _hum = _wt.get('humidity', '—')
+            _sv        = _wt.get('severity', 'normal')
+            _sev_label = 'CLEAR' if _sv == 'normal' else _sv.upper()
+            _sc2       = '#22c55e' if _sv == 'normal' else '#eab308' if _sv == 'moderate' else '#ef4444'
+            _sev_bg    = 'rgba(34,197,94,0.18)' if _sv == 'normal' else 'rgba(234,179,8,0.18)' if _sv == 'moderate' else 'rgba(239,68,68,0.18)'
+            _temp      = _wt.get('temperature', 0)
+            _fl        = _wt.get('feels_like', _temp)
+            _desc      = _wt.get('description', '')
+            _emoji     = _wt.get('emoji', '☁️')
+            _loc       = _wt.get('location', 'Los Angeles, California').upper()
+            _wind      = _wt.get('wind_speed', 0)
+            _gusts     = _wt.get('wind_gusts', _wt.get('gusts', '—'))
+            _rain      = _wt.get('rain', 0)
+            _hum       = _wt.get('humidity', '—')
+
+            # Build inline forecast HTML
+            _fcast_html = ''
+            if _wt.get('forecast_3day'):
+                _fcast_html = '<div style="display:flex;justify-content:center;gap:12px;margin-top:20px;padding-top:16px;border-top:1px solid #334155">'
+                for _fc in _wt['forecast_3day'][:3]:
+                    _fcast_html += f"""
+                    <div style="background:rgba(0,0,0,0.25);border:1px solid #334155;border-radius:10px;padding:12px 20px;text-align:center;min-width:120px">
+                        <div style="font-size:11px;color:#94a3b8;font-weight:600;margin-bottom:6px">{_fc.get('date','')}</div>
+                        <div style="font-size:28px;margin:6px 0">{_fc.get('emoji','')}</div>
+                        <div style="font-size:13px;color:#e2e8f0;font-weight:700">{_fc.get('temp_min','')}° / {_fc.get('temp_max','')}°</div>
+                        <div style="font-size:11px;color:#64748b;margin-top:3px">{_fc.get('description','')}</div>
+                    </div>"""
+                _fcast_html += '</div>'
 
             st.markdown(f"""
-            <div style="background:#1e293b;border-radius:14px;padding:24px;border:1px solid #334155;margin-bottom:16px">
-                <p style="margin:0 0 12px 0;color:#94a3b8;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px">📍 {_loc}</p>
-                <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px">
-                    <div>
-                        <div style="display:flex;align-items:center;gap:16px">
-                            <span style="font-size:52px;line-height:1">{_emoji}</span>
-                            <div>
-                                <div style="font-size:44px;font-weight:800;color:#f8fafc;line-height:1">{_temp}°C</div>
-                                <div style="font-size:13px;color:#94a3b8;margin-top:4px">Feels like {_fl}°C</div>
-                                <div style="font-size:15px;color:#e2e8f0;margin-top:6px;font-weight:600">{_desc}</div>
-                            </div>
+            <div style="background:#1a2236;border:1px solid #2d3f5e;border-radius:14px;padding:24px 28px;margin-bottom:6px">
+                <p style="margin:0 0 16px 0;color:#94a3b8;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px">📍 {_loc}</p>
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:20px">
+                    <div style="display:flex;align-items:flex-start;gap:14px">
+                        <span style="font-size:52px;line-height:1">{_emoji}</span>
+                        <div>
+                            <div style="font-size:42px;font-weight:800;color:#f8fafc;line-height:1">{_temp}°C</div>
+                            <div style="font-size:13px;color:#94a3b8;margin-top:5px">Feels like {_fl}°C</div>
+                            <div style="font-size:15px;color:#e2e8f0;margin-top:6px;font-weight:600">{_desc}</div>
                         </div>
                     </div>
-                    <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
+                    <div style="display:flex;gap:28px;align-items:flex-start;flex-wrap:wrap">
                         <div style="text-align:center">
-                            <div style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase">💨 Wind</div>
-                            <div style="font-size:18px;font-weight:700;color:#f8fafc;margin-top:4px">{_wind} km/h</div>
+                            <div style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase">💧 Wind</div>
+                            <div style="font-size:20px;font-weight:700;color:#f8fafc;margin-top:4px">{_wind} km/h</div>
                             <div style="font-size:11px;color:#64748b">Gusts {_gusts}</div>
                         </div>
                         <div style="text-align:center">
                             <div style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase">💧 Rain</div>
-                            <div style="font-size:18px;font-weight:700;color:#f8fafc;margin-top:4px">{_rain} mm</div>
+                            <div style="font-size:20px;font-weight:700;color:#f8fafc;margin-top:4px">{_rain} mm</div>
                         </div>
                         <div style="text-align:center">
                             <div style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase">💦 Humidity</div>
-                            <div style="font-size:18px;font-weight:700;color:#f8fafc;margin-top:4px">{_hum}%</div>
+                            <div style="font-size:20px;font-weight:700;color:#f8fafc;margin-top:4px">{_hum}%</div>
                         </div>
                         <div style="text-align:center">
                             <div style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase">⚠️ Severity</div>
-                            <div style="margin-top:6px;background:{_sev_bg};color:{_sc2};border:1px solid {_sc2};border-radius:6px;padding:4px 14px;font-size:13px;font-weight:700">{_sev_label}</div>
+                            <div style="margin-top:8px;background:{_sev_bg};color:{_sc2};border:1.5px solid {_sc2};border-radius:6px;padding:4px 16px;font-size:13px;font-weight:800">{_sev_label}</div>
                         </div>
                     </div>
                 </div>
+                {_fcast_html}
             </div>
             """, unsafe_allow_html=True)
-
-            # 3-day forecast
-            if _wt.get('forecast_3day'):
-                _fcc = st.columns(3)
-                for _fi, _fc in enumerate(_wt['forecast_3day'][:3]):
-                    with _fcc[_fi]:
-                        _fd = _fc.get('date', '')
-                        _fdesc = _fc.get('description', '')
-                        st.markdown(f"""
-                        <div style="background:#1e293b;padding:16px;border-radius:10px;text-align:center;border:1px solid #334155;height:110px;display:flex;flex-direction:column;justify-content:center;gap:4px">
-                            <div style="font-size:12px;color:#94a3b8;font-weight:600">{_fd}</div>
-                            <div style="font-size:28px;margin:4px 0">{_fc.get('emoji','')}</div>
-                            <div style="font-size:13px;color:#e2e8f0"><strong>{_fc.get('temp_max','')}° / {_fc.get('temp_min','')}°</strong></div>
-                            <div style="font-size:11px;color:#64748b">{_fdesc}</div>
-                        </div>
-                        """, unsafe_allow_html=True)
         else:
             st.markdown("""
-            <div style="background:#1e293b;border:1px dashed #334155;border-radius:12px;padding:32px;text-align:center;color:#64748b;margin-bottom:16px">
-                <div style="font-size:40px;margin-bottom:8px">🌤️</div>
-                <p style="margin:0;font-size:14px">Click <strong>Refresh Intelligence</strong> to fetch live Los Angeles weather and supply chain news.</p>
+            <div style="background:#1a2236;border:1px dashed #334155;border-radius:12px;padding:40px;text-align:center;color:#64748b;margin-bottom:16px">
+                <div style="font-size:44px;margin-bottom:10px">🌤️</div>
+                <p style="margin:0;font-size:14px">Click <strong>Refresh Intelligence</strong> to fetch live Los Angeles weather and news.</p>
             </div>
             """, unsafe_allow_html=True)
 
-        # LLM Risk Analysis section
+        # ── LLM ANALYSIS — inferred supply chain impact ───────────────────────
         if _lr:
-            st.markdown("---")
-            st.markdown("### 🧠 LLM Risk Analysis")
-            _rl = _lr.get('risk_level', 'LOW')
-            _rs = _lr.get('risk_score', 0)
-            _rsrc = _lr.get('source', 'LLM')
-            _dot = '🟢' if _rl == 'LOW' else '🟡' if _rl == 'MEDIUM' else '🔴'
+            _rl   = str(_lr.get('risk_level', 'LOW')).upper()
+            _rs   = _lr.get('risk_score', 0)
+            # Normalize score to percentage
+            _rs_pct = int(_rs * 100) if isinstance(_rs, float) and _rs <= 1.0 else int(_rs)
+            _rsrc = str(_lr.get('source', 'LLM')).upper()
+            _dot  = '🟢' if _rl == 'LOW' else '🟡' if _rl == 'MEDIUM' else '🔴'
+            _dem_adj  = _lr.get('demand_adjustment', 1.0)
+            _log_del  = _lr.get('logistics_delay_days', 0)
+            _rel_adj  = _lr.get('reliability_adjustment', 0.0)
+
+            st.markdown("""
+            <div style="display:flex;align-items:center;gap:8px;margin:22px 0 14px 0">
+                <span style="font-size:22px">🧠</span>
+                <h3 style="margin:0;font-size:1.2rem;font-weight:700;color:#f8fafc">LLM Risk Analysis</h3>
+                <span style="font-size:11px;color:#64748b;margin-left:6px">— weather + news inferred together</span>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # Risk metrics row
             _rc1, _rc2, _rc3 = st.columns(3)
-            _rc1.markdown(f"""
-            <div style="padding:4px 0">
-                <div style="font-size:12px;color:#94a3b8;margin-bottom:6px">Risk Level</div>
-                <div style="font-size:26px;font-weight:800;color:#f8fafc">{_dot} {_rl}</div>
+            _rc1.markdown(f"""<div style="padding:2px 0">
+                <div style="font-size:12px;color:#94a3b8;margin-bottom:8px">Risk Level</div>
+                <div style="font-size:28px;font-weight:800;color:#f8fafc">{_dot} {_rl}</div>
             </div>""", unsafe_allow_html=True)
-            _rc2.markdown(f"""
-            <div style="padding:4px 0">
-                <div style="font-size:12px;color:#94a3b8;margin-bottom:6px">Risk Score</div>
-                <div style="font-size:26px;font-weight:800;color:#f8fafc">{_rs}%</div>
+            _rc2.markdown(f"""<div style="padding:2px 0">
+                <div style="font-size:12px;color:#94a3b8;margin-bottom:8px">Risk Score</div>
+                <div style="font-size:28px;font-weight:800;color:#f8fafc">{_rs_pct}%</div>
             </div>""", unsafe_allow_html=True)
-            _rc3.markdown(f"""
-            <div style="padding:4px 0">
-                <div style="font-size:12px;color:#94a3b8;margin-bottom:6px">Analysis Source</div>
-                <div style="font-size:26px;font-weight:800;color:#f8fafc">🧠 {_rsrc}</div>
+            _rc3.markdown(f"""<div style="padding:2px 0">
+                <div style="font-size:12px;color:#94a3b8;margin-bottom:8px">Analysis Source</div>
+                <div style="font-size:28px;font-weight:800;color:#f8fafc">🧠 {_rsrc}</div>
             </div>""", unsafe_allow_html=True)
 
-            # Weather & News impact side by side
+
+            # ── Weather & News impact — blue analysis cards ─────────────────
             _wi = _lr.get('weather_impact', '')
             _ni = _lr.get('news_impact', '')
             if _wi or _ni:
+                st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
                 _imp1, _imp2 = st.columns(2)
                 with _imp1:
                     if _wi:
-                        st.markdown(f"""
-                        <div style="margin-top:12px">
+                        st.markdown(f"""<div>
                             <div style="font-size:13px;color:#f8fafc;margin-bottom:8px;font-weight:700">☀️ Weather Impact</div>
-                            <div style="background:#1e3a5f;border-radius:8px;padding:16px;color:#bfdbfe;font-size:13px;line-height:1.7;border:1px solid #1e40af;min-height:80px">{_wi}</div>
+                            <div style="background:#1e3a5f;border-radius:8px;padding:16px 18px;color:#bfdbfe;font-size:13px;line-height:1.7;border:1px solid #1e40af;min-height:72px">{_wi}</div>
                         </div>""", unsafe_allow_html=True)
                 with _imp2:
                     if _ni:
-                        st.markdown(f"""
-                        <div style="margin-top:12px">
+                        st.markdown(f"""<div>
                             <div style="font-size:13px;color:#f8fafc;margin-bottom:8px;font-weight:700">🗞️ News Impact</div>
-                            <div style="background:#1e3a5f;border-radius:8px;padding:16px;color:#bfdbfe;font-size:13px;line-height:1.7;border:1px solid #1e40af;min-height:80px">{_ni}</div>
+                            <div style="background:#1e3a5f;border-radius:8px;padding:16px 18px;color:#bfdbfe;font-size:13px;line-height:1.7;border:1px solid #1e40af;min-height:72px">{_ni}</div>
                         </div>""", unsafe_allow_html=True)
 
+            # ── Recommendation ──────────────────────────────────────────────
             if _lr.get('recommendation'):
                 st.markdown(f"""
-                <div style="background:rgba(34,197,94,0.1);border:1px solid #22c55e;border-radius:10px;padding:16px 20px;margin-top:16px;font-size:13px;color:#86efac;line-height:1.7">
+                <div style="background:rgba(34,197,94,0.08);border:1px solid #22c55e;border-radius:10px;padding:14px 20px;margin-top:14px;font-size:13px;color:#86efac;line-height:1.7">
                     💡 <strong style="color:#4ade80">Recommendation:</strong> {_lr['recommendation']}
                 </div>""", unsafe_allow_html=True)
 
-        # Latest Supply Chain News
+            # ── Alert message if present ────────────────────────────────────
+            if _lr.get('alert_message') and _rl != 'LOW':
+                st.markdown(f"""
+                <div style="background:rgba(239,68,68,0.08);border:1px solid #ef4444;border-radius:10px;padding:12px 18px;margin-top:10px;font-size:13px;color:#fca5a5">
+                    🚨 <strong>Agent Alert:</strong> {_lr['alert_message']}
+                </div>""", unsafe_allow_html=True)
+
+        # ── LATEST SUPPLY CHAIN NEWS ──────────────────────────────────────────
         if _news:
-            st.markdown("---")
-            st.markdown("### 📰 Latest Supply Chain News")
+            st.markdown("""
+            <div style="display:flex;align-items:center;gap:8px;margin:24px 0 12px 0">
+                <span style="font-size:20px">🗞️</span>
+                <h3 style="margin:0;font-size:1.2rem;font-weight:700;color:#f8fafc">Latest Supply Chain News</h3>
+                <span style="font-size:11px;color:#64748b;margin-left:6px">— analyzed for supply chain relevance</span>
+            </div>
+            """, unsafe_allow_html=True)
             for _article in _news[:5]:
-                _title = _article.get('title', '')
-                _source = _article.get('source', '')
-                _url = _article.get('url', _article.get('href', '#'))
+                _title   = _article.get('title', '')
+                _source  = _article.get('source', '')
+                _url     = _article.get('url', _article.get('href', '#'))
+                _snippet = _article.get('snippet', '')
                 if _title:
+                    # Infer relevance tag from title keywords
+                    _t_lower = _title.lower()
+                    if any(w in _t_lower for w in ['disruption', 'shortage', 'delay', 'strike', 'crisis', 'flood', 'hurricane']):
+                        _tag = '<span style="background:rgba(239,68,68,0.15);color:#fca5a5;border:1px solid #ef4444;border-radius:4px;padding:1px 7px;font-size:10px;font-weight:700;margin-left:6px">HIGH RISK</span>'
+                    elif any(w in _t_lower for w in ['supply chain', 'logistics', 'inventory', 'freight', 'shipping', 'port']):
+                        _tag = '<span style="background:rgba(234,179,8,0.15);color:#fde68a;border:1px solid #eab308;border-radius:4px;padding:1px 7px;font-size:10px;font-weight:700;margin-left:6px">RELEVANT</span>'
+                    else:
+                        _tag = '<span style="background:rgba(100,116,139,0.15);color:#94a3b8;border:1px solid #475569;border-radius:4px;padding:1px 7px;font-size:10px;font-weight:700;margin-left:6px">MONITOR</span>'
                     st.markdown(f"""
-                    <div style="padding:10px 0;border-bottom:1px solid #1e293b;font-size:13px;color:#e2e8f0">
-                        🗞️ {_title} — <em style="color:#94a3b8">{_source}</em>&nbsp;&nbsp;<a href="{_url}" target="_blank" style="color:#38bdf8;text-decoration:none;font-size:12px">Link ↗</a>
+                    <div style="padding:10px 0;border-bottom:1px solid #1e293b">
+                        <div style="font-size:13px;color:#e2e8f0;line-height:1.5">
+                            🗞️ <strong>{_title}</strong>{_tag}
+                        </div>
+                        <div style="font-size:12px;color:#64748b;margin-top:4px">
+                            <em>{_source}</em> &nbsp;·&nbsp; <a href="{_url}" target="_blank" style="color:#38bdf8;text-decoration:none">Read article ↗</a>
+                        </div>
+                        {f'<div style="font-size:12px;color:#94a3b8;margin-top:5px;line-height:1.5">{_snippet[:180]}…</div>' if _snippet else ''}
                     </div>""", unsafe_allow_html=True)
+
 
     # =================== TAB 3: AI vs RULES COMPARISON ===================
     with tab3:
