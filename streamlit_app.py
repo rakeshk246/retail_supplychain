@@ -635,183 +635,148 @@ def main():
         "⚙️ Deep Dive & Logs",
     ])
 
-    # =================== TAB 1: DAY BRIEFING (all-in-one) ===================
+    # =================== TAB 1: LIVE DASHBOARD ===================
     with tab1:
         if st.session_state.rec:
-            # 1. Supply chain map — visual overview
-            render_map(model)
+            rec = st.session_state.rec
+            day_num  = rec.get('day', model.current_day)
+            path     = rec.get('path', 'NORMAL')
+            demand   = rec.get('demand', 0)
+            fulfilled = rec.get('fulfilled', 0)
+            inv_before = rec.get('inv_before', 0)
+            inv_after  = rec.get('inv_after', 0)
 
-            # 2. Agent status cards — quick status
-            st.markdown("---")
-            render_agent_cards(model, st.session_state.rec)
+            # ---- 1. Day header ----
+            path_emoji = {"NORMAL": "🟢", "EMERGENCY": "🟡", "CRISIS": "🔴"}.get(path, "⚪")
+            st.markdown(f"""
+            <div style="display:flex;align-items:center;gap:16px;padding:10px 0 6px 0">
+                <span style="font-size:36px">📅</span>
+                <h1 style="margin:0;font-size:2.2rem;font-weight:800;color:#f8fafc">
+                    Day {day_num} &nbsp;— &nbsp;{path_emoji} &nbsp;{path} Path
+                </h1>
+            </div>""", unsafe_allow_html=True)
 
+            # ---- 2. Status banner ----
+            if fulfilled >= demand:
+                _bg = "rgba(34,197,94,0.15)"; _bd = "#22c55e"; _tc = "#86efac"
+                _msg = f"✅ All orders fulfilled! Shipped {fulfilled}/{demand} units. Stock: {inv_before} → {inv_after}"
+            elif fulfilled > 0:
+                _bg = "rgba(234,179,8,0.15)"; _bd = "#eab308"; _tc = "#fde68a"
+                _msg = f"⚠️ Partial fulfillment. Shipped {fulfilled}/{demand} units. Stock: {inv_before} → {inv_after}"
+            else:
+                _bg = "rgba(239,68,68,0.15)"; _bd = "#ef4444"; _tc = "#fca5a5"
+                _msg = f"❌ Stockout! Could not fulfill {demand} units. Stock: {inv_before} → {inv_after}"
+            st.markdown(f"""
+            <div style="background:{_bg};border:1.5px solid {_bd};border-radius:10px;padding:14px 20px;margin:10px 0 20px 0;font-size:14px;font-weight:600;color:{_tc}">
+                {_msg}
+            </div>""", unsafe_allow_html=True)
 
-            # Weather Intelligence
-            st.markdown("---")
-            st.subheader("☁️ Weather & Intelligence")
-            from news_search import get_intelligence_analyzer
-            intel = get_intelligence_analyzer()
-            data = intel.gather_intelligence(model.current_day)
-            w = data.get('weather')
-            if w:
-                weather_html = f"""
-                <div style="background: linear-gradient(135deg, #1e293b, #0f172a); border-radius: 12px; padding: 20px; color: white; box-shadow: 0 4px 6px rgba(0,0,0,0.3); font-family: -apple-system, system-ui, sans-serif; border: 1px solid #334155;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                        <div>
-                            <p style="margin: 0 0 5px 0; color: #94a3b8; font-size: 13px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase;">📍 {w.get('location', '')}</p>
-                            <h2 style="margin: 0; font-size: 28px; font-weight: 700; color: #f8fafc;">{w.get('emoji', '☁️')} {w.get('description', '')}</h2>
-                        </div>
-                        <div style="text-align: right;">
-                            <h1 style="margin: 0; font-size: 42px; font-weight: 700; color: #38bdf8;">{w.get('temperature', 0)}°C</h1>
-                            <p style="margin: 5px 0 0 0; color: #94a3b8; font-size: 14px;">Feels like {w.get('feels_like', w.get('temperature', 0))}°C</p>
-                        </div>
-                    </div>
-                    
-                    <div style="display: flex; gap: 20px; background: rgba(255,255,255,0.03); padding: 15px; border-radius: 10px; margin-bottom: 20px; border: 1px solid rgba(255,255,255,0.05);">
-                        <div style="flex: 1;">
-                            <div style="color: #94a3b8; font-size: 12px; font-weight: 600; text-transform: uppercase; margin-bottom: 4px;">💨 Wind</div>
-                            <div style="font-size: 18px; font-weight: 600; color: #e2e8f0;">{w.get('wind_speed', 0)} <span style="font-size: 13px; color: #64748b; font-weight: normal;">km/h</span></div>
-                        </div>
-                        <div style="flex: 1; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 20px;">
-                            <div style="color: #94a3b8; font-size: 12px; font-weight: 600; text-transform: uppercase; margin-bottom: 4px;">🌧️ Rain</div>
-                            <div style="font-size: 18px; font-weight: 600; color: #e2e8f0;">{w.get('rain', 0)} <span style="font-size: 13px; color: #64748b; font-weight: normal;">mm</span></div>
-                        </div>
-                        <div style="flex: 1; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 20px;">
-                            <div style="color: #94a3b8; font-size: 12px; font-weight: 600; text-transform: uppercase; margin-bottom: 4px;">⚠️ Impact Risk</div>
-                            <div style="font-size: 16px; font-weight: 700; padding: 2px 8px; border-radius: 4px; display: inline-block; background: {'rgba(239,68,68,0.2)' if w.get('severity') == 'severe' else 'rgba(234,179,8,0.2)' if w.get('severity') == 'moderate' else 'rgba(34,197,94,0.2)'}; color: {'#fca5a5' if w.get('severity') == 'severe' else '#fde047' if w.get('severity') == 'moderate' else '#86efac'}; border: 1px solid {'rgba(239,68,68,0.4)' if w.get('severity') == 'severe' else 'rgba(234,179,8,0.4)' if w.get('severity') == 'moderate' else 'rgba(34,197,94,0.4)'};">{w.get('severity', 'normal').upper()}</div>
-                        </div>
-                    </div>
-                """
-                
-                if w.get('forecast_3day'):
-                    weather_html += '<div style="display: flex; gap: 12px;">'
-                    for fc in w['forecast_3day'][:3]:
-                        weather_html += f"""
-                        <div style="flex: 1; background: rgba(0,0,0,0.3); padding: 12px; border-radius: 8px; text-align: center; border: 1px solid #1e293b;">
-                            <div style="font-size: 12px; color: #cbd5e1; font-weight: 700; text-transform: uppercase;">{fc.get('date', '')[-5:].replace('-','/')}</div>
-                            <div style="font-size: 28px; margin: 8px 0;">{fc.get('emoji', '')}</div>
-                            <div style="font-size: 14px; font-weight: 600; color: #94a3b8;"><span style="color:#e2e8f0">{fc.get('temp_max', '')}°</span> <span style="opacity:0.5">|</span> {fc.get('temp_min', '')}°</div>
-                        </div>
-                        """
-                    weather_html += '</div>'
-                
-                weather_html += '</div>'
-                st.markdown(weather_html, unsafe_allow_html=True)
-            
-            # 3. Shipment tracker
-            st.subheader("📦 Shipments In Transit")
-            render_shipments(model)
-
-            st.markdown("---")
-
-            # 4. Full day narrative — data source, scenario, decisions
-            render_narrative(st.session_state.rec, model)
-
-            # 5. Prediction for next day
-            if model.warehouse.inventory > 0:
-                avg_dem = model.daily_demand if model.daily_demand > 0 else 100
-                days_left = model.warehouse.inventory / max(avg_dem, 1)
-                will_ok = model.warehouse.inventory > avg_dem
-                st.markdown("---")
-                st.markdown("### 🔮 What might happen tomorrow?")
-                st.markdown(f"- Expected demand: ~{avg_dem} units")
-                st.markdown(f"- Current stock: {model.warehouse.inventory} units")
-                st.markdown(f"- Days of stock left: **{days_left:.1f}**")
-                if will_ok:
-                    st.markdown(f"- Will we have enough? ✅ **Yes** ({model.warehouse.inventory - avg_dem} to spare)")
-                else:
-                    st.markdown(f"- Will we have enough? ❌ **No — stockout likely!**")
-
-            # 6. Timeline
-            if len(st.session_state.data) > 1:
-                st.markdown("---")
-                st.markdown("### 📜 Recent Timeline")
-                for r in reversed(st.session_state.data[-8:]):
-                    pe = {"NORMAL": "🟢", "EMERGENCY": "🟡", "CRISIS": "🔴"}.get(r['path'], "⚪")
-                    so_icon = "❌" if r['stockout'] else "✅"
-                    src_date = r.get('source_date', '')
-                    date_str = f" ({src_date})" if src_date else ""
-                    st.markdown(
-                        f"{pe} **Day {r['day']}**{date_str} {so_icon} — "
-                        f"Demand: {r['demand']} | Stock: {r['inv_after']} | {r['path']}")
-        else:
-            st.markdown("""
-            ### 👋 Welcome to the AI Supply Chain Simulator!
-            
-            **What is this?** A simulation of a real supply chain powered by **Walmart M5 sales data**.
-            AI agents use an **LLM (Groq)** + **LSTM forecasting** to make decisions about 
-            ordering, shipping, and inventory management.
-            
-            **How to use:**
-            1. Click **▶️ Next Day** to advance one day
-            2. The **Day Briefing** shows you exactly:
-               - 📂 Which dataset date is being used
-               - 🎯 The full scenario (inventory, demand, supply status)
-               - 🤖 Step-by-step agent decisions 
-               - 💭 Raw LLM reasoning
-            
-            **Try disruptions** to stress-test the AI:
-            - 🌪️ **Hurricane** — Supplier can't send goods for 4 days
-            - 🚧 **Road Block** — Trucks can't deliver for 3 days  
-            - 📈 **Demand Spike** — Suddenly customers want more!
-            """)
-
-    # =================== CHARTS & KPIs ===================
-    with tab1:
-        st.divider()
-        if st.session_state.data:
-            # KPIs
+            # ---- 3. KPIs ----
             st.header("📊 Key Performance Indicators")
             mc = st.columns(6)
-            items = [
+            kpi_items = [
                 ('Fill Rate (%)', '📈'), ('Stock-out Rate (%)', '📉'),
                 ('Avg Inventory', '📦'), ('Resilience Index', '🛡'),
                 ('Customer Satisfaction', '⭐'), ('Avg Recovery Time (days)', '⏱')
             ]
-            for col, (n, icon) in zip(mc, items):
+            for col, (n, icon) in zip(mc, kpi_items):
                 with col:
                     st.metric(f"{icon} {n}", f"{kpis.get(n, 0)}")
 
-            df = pd.DataFrame(st.session_state.data)
+            # ---- 4. Inventory Over Time + Stock Health gauge ----
+            if st.session_state.data:
+                df = pd.DataFrame(st.session_state.data)
 
-            # Inventory + Gauge
-            c1, c2 = st.columns([3, 1])
-            with c1:
-                st.subheader("📦 Inventory Over Time")
-                fig = go.Figure()
-                fig.add_trace(go.Scatter(x=df['day'], y=df['inv_after'],
-                    name="Inventory", fill='tozeroy',
-                    line=dict(color='#3b82f6', width=2),
-                    fillcolor='rgba(59,130,246,0.15)'))
-                fig.add_hline(y=200, line_dash="dash", line_color="#eab308",
-                    annotation_text="Reorder Point (200)")
-                fig.update_layout(height=300, template='plotly_dark',
-                    yaxis_title="Units", xaxis_title="Day")
-                st.plotly_chart(fig, use_container_width=True)
-            with c2:
-                st.subheader("Stock Health")
-                fig = render_gauge(model.warehouse.inventory)
-                st.plotly_chart(fig, use_container_width=True)
-                if model.warehouse.inventory <= 0:
-                    st.error("🔴 EMPTY!")
-                elif model.warehouse.inventory < 200:
-                    st.warning("🟡 LOW")
-                else:
-                    st.success("🟢 HEALTHY")
+                c1, c2 = st.columns([3, 1])
+                with c1:
+                    st.subheader("📦 Inventory Over Time")
+                    fig_inv = go.Figure()
+                    fig_inv.add_trace(go.Scatter(
+                        x=df['day'], y=df['inv_after'],
+                        name="Inventory", fill='tozeroy',
+                        line=dict(color='#3b82f6', width=2),
+                        fillcolor='rgba(59,130,246,0.15)'))
+                    fig_inv.add_hline(y=200, line_dash="dash", line_color="#eab308",
+                        annotation_text="Reorder Point (200)")
+                    fig_inv.update_layout(height=300, template='plotly_dark',
+                        yaxis_title="Units", xaxis_title="Day",
+                        margin=dict(t=20, b=40))
+                    st.plotly_chart(fig_inv, use_container_width=True)
 
-            # Demand vs Fulfilled
-            st.subheader("🛒 Demand vs Fulfilled")
-            fig = go.Figure()
-            fig.add_trace(go.Bar(x=df['day'], y=df['demand'],
-                name='Customers Wanted', marker_color='#ef4444', opacity=0.5))
-            fig.add_trace(go.Bar(x=df['day'], y=df['fulfilled'],
-                name='We Shipped', marker_color='#22c55e', opacity=0.9))
-            fig.update_layout(height=250, barmode='overlay', template='plotly_dark',
-                xaxis_title="Day", yaxis_title="Units")
-            st.plotly_chart(fig, use_container_width=True)
+                with c2:
+                    st.subheader("Health")
+                    fig_g = render_gauge(model.warehouse.inventory)
+                    st.plotly_chart(fig_g, use_container_width=True)
+                    if model.warehouse.inventory <= 0:
+                        st.error("🔴 EMPTY!")
+                    elif model.warehouse.inventory < 200:
+                        st.warning("🟡 LOW")
+                    else:
+                        st.success("🟢 HEALTHY")
+
+                # ---- 5. Demand vs Fulfilled ----
+                st.subheader("🛒 Demand vs Fulfilled")
+                fig_d = go.Figure()
+                fig_d.add_trace(go.Bar(x=df['day'], y=df['demand'],
+                    name='Customers Wanted', marker_color='#ef4444', opacity=0.5))
+                fig_d.add_trace(go.Bar(x=df['day'], y=df['fulfilled'],
+                    name='We Shipped', marker_color='#22c55e', opacity=0.9))
+                fig_d.update_layout(height=260, barmode='overlay', template='plotly_dark',
+                    xaxis_title="Day", yaxis_title="Units",
+                    legend=dict(orientation='v', x=1.01, y=0.9),
+                    margin=dict(t=20, b=40))
+                st.plotly_chart(fig_d, use_container_width=True)
+
+                # ---- 6. Shipments In Transit ----
+                st.subheader("📦 Shipments In Transit")
+                render_shipments(model)
+
+                # ---- 7. Workflow Path History ----
+                st.subheader("🔀 Workflow Path History")
+                _path_colors = {"NORMAL": "#22c55e", "EMERGENCY": "#eab308", "CRISIS": "#ef4444"}
+                _path_nums   = {"NORMAL": 1, "EMERGENCY": 2, "CRISIS": 3}
+                _path_labels = {1: "Normal", 2: "Emergency", 3: "Crisis"}
+                _days  = [r['day'] for r in st.session_state.data]
+                _paths = [r['path'] for r in st.session_state.data]
+                _pnums = [_path_nums.get(p, 1) for p in _paths]
+                _pclrs = [_path_colors.get(p, '#22c55e') for p in _paths]
+                fig_wf = go.Figure()
+                fig_wf.add_trace(go.Bar(
+                    x=_days, y=_pnums,
+                    marker_color=_pclrs,
+                    text=_paths,
+                    textposition='inside',
+                    textfont=dict(color='white', size=11),
+                    showlegend=False
+                ))
+                fig_wf.update_layout(
+                    height=220, template='plotly_dark',
+                    xaxis_title="Day",
+                    yaxis=dict(
+                        tickvals=[1, 2, 3],
+                        ticktext=["Normal", "Emergency", "Crisis"],
+                        range=[0, 3.5]
+                    ),
+                    margin=dict(t=10, b=40)
+                )
+                st.plotly_chart(fig_wf, use_container_width=True)
+
         else:
-            st.info("Run the simulation to see charts.")
-
+            # Welcome screen (no simulation run yet)
+            st.markdown("""
+            <div style="text-align:center;padding:60px 20px">
+                <div style="font-size:64px;margin-bottom:16px">🏭</div>
+                <h2 style="color:#f8fafc;margin-bottom:8px">AI Supply Chain Simulator</h2>
+                <p style="color:#94a3b8;font-size:15px;max-width:500px;margin:0 auto 24px auto">
+                    Powered by <strong>Walmart M5</strong> real sales data · <strong>Groq LLM</strong> · <strong>LSTM forecasting</strong>
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+            _w1, _w2, _w3 = st.columns(3)
+            _w1.info("**▶️ Click Next Day** in the sidebar to start the simulation")
+            _w2.info("**🌪️ Add disruptions** like Hurricane or Road Block to stress-test")
+            _w3.info("**🧠 Switch to AI Brain tab** to see agent reasoning and decisions")
+    # =================== CHARTS & KPIs ===================
     # =================== WHY? (XAI) ===================
     with tab2:
         st.header("🧠 Explainable AI — Decision Transparency")
@@ -1036,6 +1001,227 @@ def main():
         st.divider()
         render_workflow(model, st.session_state.data)
 
+        # ---- SECTION 3: AGENT GROUP CHAT (Internal Communications Log) ----
+        st.divider()
+        st.markdown("""
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px">
+            <span style="font-size:28px">💬</span>
+            <div>
+                <h2 style="margin:0;font-size:1.5rem">Internal Communications Log</h2>
+                <p style="margin:0;color:#94a3b8;font-size:13px">Live inter-agent messages — every decision, broadcast, and order visible in real-time</p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Agent avatar map (emoji used as avatar)
+        _ag_av = {"Supplier": "🏭", "Warehouse": "📦", "Logistics": "🚚", "Demand": "📈", "System": "🌐", "Intel": "🧠"}
+        _bus = model.bus if hasattr(model, 'bus') else None
+        _msgs_raw = []
+        if _bus and hasattr(_bus, 'history') and _bus.history:
+            _msgs_raw = _bus.history
+        elif _bus and hasattr(_bus, 'message_log') and _bus.message_log:
+            _msgs_raw = _bus.message_log
+
+        if _msgs_raw:
+            _show_n_col, _order_col = st.columns([2, 1])
+            _show_n = _show_n_col.selectbox("Messages to show", [10, 20, 50, 100], index=1, label_visibility="collapsed")
+            _newest_first = _order_col.toggle("Newest first", value=False)
+            _display_msgs = list(reversed(_msgs_raw[-_show_n:])) if _newest_first else _msgs_raw[-_show_n:]
+            for _m in _display_msgs:
+                # Support both object attributes and dict keys
+                if isinstance(_m, dict):
+                    _s = _m.get('sender', 'System')
+                    _c = _m.get('content', str(_m))
+                    _r = _m.get('recipient', 'all')
+                    _day = _m.get('day', '')
+                else:
+                    _s = getattr(_m, 'sender', 'System')
+                    _c = getattr(_m, 'content', str(_m))
+                    _r = getattr(_m, 'recipient', 'all')
+                    _day = getattr(_m, 'day', '')
+                _avatar_emoji = _ag_av.get(_s, "🤖")
+                _day_label = f" *(Day {_day})*" if _day else ""
+                with st.chat_message(name=_s, avatar=_avatar_emoji):
+                    st.markdown(f"**{_s}**{_day_label}")
+                    st.markdown(f"@{_r} — {_c}")
+        else:
+            st.markdown("""
+            <div style="background:#1e293b;border:1px dashed #334155;border-radius:12px;padding:32px;text-align:center;color:#64748b">
+                <div style="font-size:40px;margin-bottom:8px">💬</div>
+                <p style="margin:0;font-size:14px">No messages yet. Run the simulation to see live agent communications.</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+        # ---- SECTION 4: EXTERNAL INTELLIGENCE ----
+        st.divider()
+        st.markdown("""
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px">
+            <span style="font-size:28px">🛰️</span>
+            <div>
+                <h2 style="margin:0;font-size:1.5rem">External Intelligence</h2>
+                <p style="margin:0;color:#94a3b8;font-size:13px">Live weather, news, and LLM risk analysis — informs agent decisions</p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        _ei1, _ei2 = st.columns([3, 1])
+        with _ei2:
+            _ref = st.button("🔄 Refresh Intelligence", use_container_width=True, key="t2_intel")
+        if _ref or 'intel_cache' not in st.session_state:
+            with st.spinner("Fetching live weather and news..."):
+                try:
+                    from news_search import get_intelligence_analyzer
+                    _iao = get_intelligence_analyzer()
+                    st.session_state['intel_cache'] = _iao.gather_intelligence(model.current_day)
+                except Exception as _ex:
+                    st.session_state['intel_cache'] = {}
+                    st.warning(f"Intel fetch failed: {_ex}")
+
+        _idat = st.session_state.get('intel_cache', {})
+        _wt = _idat.get('weather', {})
+        _lr = _idat.get('llm_risk_assessment', {})
+        _news = _idat.get('news', [])
+
+        if _wt:
+            _sv = _wt.get('severity', 'normal')
+            _sev_label = _sv.upper()
+            _sc2 = '#22c55e' if _sv == 'normal' else '#eab308' if _sv == 'moderate' else '#ef4444'
+            _sev_bg = 'rgba(34,197,94,0.15)' if _sv == 'normal' else 'rgba(234,179,8,0.15)' if _sv == 'moderate' else 'rgba(239,68,68,0.15)'
+            _temp = _wt.get('temperature', 0)
+            _fl = _wt.get('feels_like', _temp)
+            _desc = _wt.get('description', '')
+            _emoji = _wt.get('emoji', '☁️')
+            _loc = _wt.get('location', 'Los Angeles, California').upper()
+            _wind = _wt.get('wind_speed', 0)
+            _gusts = _wt.get('wind_gusts', _wt.get('gusts', '—'))
+            _rain = _wt.get('rain', 0)
+            _hum = _wt.get('humidity', '—')
+
+            st.markdown(f"""
+            <div style="background:#1e293b;border-radius:14px;padding:24px;border:1px solid #334155;margin-bottom:16px">
+                <p style="margin:0 0 12px 0;color:#94a3b8;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px">📍 {_loc}</p>
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px">
+                    <div>
+                        <div style="display:flex;align-items:center;gap:16px">
+                            <span style="font-size:52px;line-height:1">{_emoji}</span>
+                            <div>
+                                <div style="font-size:44px;font-weight:800;color:#f8fafc;line-height:1">{_temp}°C</div>
+                                <div style="font-size:13px;color:#94a3b8;margin-top:4px">Feels like {_fl}°C</div>
+                                <div style="font-size:15px;color:#e2e8f0;margin-top:6px;font-weight:600">{_desc}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
+                        <div style="text-align:center">
+                            <div style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase">💨 Wind</div>
+                            <div style="font-size:18px;font-weight:700;color:#f8fafc;margin-top:4px">{_wind} km/h</div>
+                            <div style="font-size:11px;color:#64748b">Gusts {_gusts}</div>
+                        </div>
+                        <div style="text-align:center">
+                            <div style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase">💧 Rain</div>
+                            <div style="font-size:18px;font-weight:700;color:#f8fafc;margin-top:4px">{_rain} mm</div>
+                        </div>
+                        <div style="text-align:center">
+                            <div style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase">💦 Humidity</div>
+                            <div style="font-size:18px;font-weight:700;color:#f8fafc;margin-top:4px">{_hum}%</div>
+                        </div>
+                        <div style="text-align:center">
+                            <div style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase">⚠️ Severity</div>
+                            <div style="margin-top:6px;background:{_sev_bg};color:{_sc2};border:1px solid {_sc2};border-radius:6px;padding:4px 14px;font-size:13px;font-weight:700">{_sev_label}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # 3-day forecast
+            if _wt.get('forecast_3day'):
+                _fcc = st.columns(3)
+                for _fi, _fc in enumerate(_wt['forecast_3day'][:3]):
+                    with _fcc[_fi]:
+                        _fd = _fc.get('date', '')
+                        _fdesc = _fc.get('description', '')
+                        st.markdown(f"""
+                        <div style="background:#1e293b;padding:16px;border-radius:10px;text-align:center;border:1px solid #334155;height:110px;display:flex;flex-direction:column;justify-content:center;gap:4px">
+                            <div style="font-size:12px;color:#94a3b8;font-weight:600">{_fd}</div>
+                            <div style="font-size:28px;margin:4px 0">{_fc.get('emoji','')}</div>
+                            <div style="font-size:13px;color:#e2e8f0"><strong>{_fc.get('temp_max','')}° / {_fc.get('temp_min','')}°</strong></div>
+                            <div style="font-size:11px;color:#64748b">{_fdesc}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+        else:
+            st.markdown("""
+            <div style="background:#1e293b;border:1px dashed #334155;border-radius:12px;padding:32px;text-align:center;color:#64748b;margin-bottom:16px">
+                <div style="font-size:40px;margin-bottom:8px">🌤️</div>
+                <p style="margin:0;font-size:14px">Click <strong>Refresh Intelligence</strong> to fetch live Los Angeles weather and supply chain news.</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+        # LLM Risk Analysis section
+        if _lr:
+            st.markdown("---")
+            st.markdown("### 🧠 LLM Risk Analysis")
+            _rl = _lr.get('risk_level', 'LOW')
+            _rs = _lr.get('risk_score', 0)
+            _rsrc = _lr.get('source', 'LLM')
+            _dot = '🟢' if _rl == 'LOW' else '🟡' if _rl == 'MEDIUM' else '🔴'
+            _rc1, _rc2, _rc3 = st.columns(3)
+            _rc1.markdown(f"""
+            <div style="padding:4px 0">
+                <div style="font-size:12px;color:#94a3b8;margin-bottom:6px">Risk Level</div>
+                <div style="font-size:26px;font-weight:800;color:#f8fafc">{_dot} {_rl}</div>
+            </div>""", unsafe_allow_html=True)
+            _rc2.markdown(f"""
+            <div style="padding:4px 0">
+                <div style="font-size:12px;color:#94a3b8;margin-bottom:6px">Risk Score</div>
+                <div style="font-size:26px;font-weight:800;color:#f8fafc">{_rs}%</div>
+            </div>""", unsafe_allow_html=True)
+            _rc3.markdown(f"""
+            <div style="padding:4px 0">
+                <div style="font-size:12px;color:#94a3b8;margin-bottom:6px">Analysis Source</div>
+                <div style="font-size:26px;font-weight:800;color:#f8fafc">🧠 {_rsrc}</div>
+            </div>""", unsafe_allow_html=True)
+
+            # Weather & News impact side by side
+            _wi = _lr.get('weather_impact', '')
+            _ni = _lr.get('news_impact', '')
+            if _wi or _ni:
+                _imp1, _imp2 = st.columns(2)
+                with _imp1:
+                    if _wi:
+                        st.markdown(f"""
+                        <div style="margin-top:12px">
+                            <div style="font-size:13px;color:#f8fafc;margin-bottom:8px;font-weight:700">☀️ Weather Impact</div>
+                            <div style="background:#1e3a5f;border-radius:8px;padding:16px;color:#bfdbfe;font-size:13px;line-height:1.7;border:1px solid #1e40af;min-height:80px">{_wi}</div>
+                        </div>""", unsafe_allow_html=True)
+                with _imp2:
+                    if _ni:
+                        st.markdown(f"""
+                        <div style="margin-top:12px">
+                            <div style="font-size:13px;color:#f8fafc;margin-bottom:8px;font-weight:700">🗞️ News Impact</div>
+                            <div style="background:#1e3a5f;border-radius:8px;padding:16px;color:#bfdbfe;font-size:13px;line-height:1.7;border:1px solid #1e40af;min-height:80px">{_ni}</div>
+                        </div>""", unsafe_allow_html=True)
+
+            if _lr.get('recommendation'):
+                st.markdown(f"""
+                <div style="background:rgba(34,197,94,0.1);border:1px solid #22c55e;border-radius:10px;padding:16px 20px;margin-top:16px;font-size:13px;color:#86efac;line-height:1.7">
+                    💡 <strong style="color:#4ade80">Recommendation:</strong> {_lr['recommendation']}
+                </div>""", unsafe_allow_html=True)
+
+        # Latest Supply Chain News
+        if _news:
+            st.markdown("---")
+            st.markdown("### 📰 Latest Supply Chain News")
+            for _article in _news[:5]:
+                _title = _article.get('title', '')
+                _source = _article.get('source', '')
+                _url = _article.get('url', _article.get('href', '#'))
+                if _title:
+                    st.markdown(f"""
+                    <div style="padding:10px 0;border-bottom:1px solid #1e293b;font-size:13px;color:#e2e8f0">
+                        🗞️ {_title} — <em style="color:#94a3b8">{_source}</em>&nbsp;&nbsp;<a href="{_url}" target="_blank" style="color:#38bdf8;text-decoration:none;font-size:12px">Link ↗</a>
+                    </div>""", unsafe_allow_html=True)
+
     # =================== TAB 3: AI vs RULES COMPARISON ===================
     with tab3:
         st.header("⚔️ AI Agents vs Simple Rules")
@@ -1232,567 +1418,159 @@ def main():
             else:
                 st.info(f"🤝 **Tie!** Both at {af}%")
 
-    # =================== TAB 4: DATA EXPLORER ===================
+    # =================== TAB 4: DEEP DIVE & LOGS ===================
     with tab4:
-        st.header("📂 Data Explorer — Training Dataset")
-
-        dl = st.session_state.dl
-        hist = dl.historical_data
-        summary = dl.get_data_summary()
-
-        if hist is not None and summary is not None:
-            # Dataset info card
-            source_name = "Walmart M5 Forecasting Competition" if summary['source'] == 'm5' else "Enhanced Synthetic Data"
-            source_emoji = "🏪" if summary['source'] == 'm5' else "🔧"
-
-            st.markdown(f"""
-            ### {source_emoji} Dataset: **{source_name}**
-            
-            | Property | Value |
-            |----------|-------|
-            | **Source** | {source_name} |
-            | **Total Days** | {summary['total_days']:,} |
-            | **Date Range** | {summary['date_range']} |
-            | **Mean Daily Demand** | {summary['mean_demand']} units |
-            | **Std Deviation** | {summary['std_demand']} units |
-            | **Min Demand** | {summary['min_demand']} units |
-            | **Max Demand** | {summary['max_demand']} units |
-            """)
-
-            if summary['source'] == 'm5':
-                st.info("""
-                📋 **About M5 Dataset:** The [Walmart M5 Forecasting Competition](https://www.kaggle.com/competitions/m5-forecasting-accuracy) 
-                contains **real daily sales** data from Walmart stores across California, Texas, and Wisconsin.
-                We use **Store CA_1, Item FOODS_3_090** — a food product with realistic demand patterns
-                including weekday/weekend patterns, seasonal trends, and promotional spikes.
-                """)
-
-            st.divider()
-
-            # Historical demand chart
-            st.subheader("📈 Historical Demand Over Time")
-            fig = go.Figure()
-
-            # Show last 365 days for clarity (or all if less)
-            show_days = min(365, len(hist))
-            recent = hist.tail(show_days)
-
-            fig.add_trace(go.Scatter(
-                x=recent['ds'], y=recent['y'],
-                name='Daily Demand',
-                line=dict(color='#3b82f6', width=1),
-                opacity=0.6
-            ))
-
-            # 30-day moving average
-            if len(recent) >= 30:
-                ma = recent['y'].rolling(30).mean()
-                fig.add_trace(go.Scatter(
-                    x=recent['ds'], y=ma,
-                    name='30-Day Moving Average',
-                    line=dict(color='#f59e0b', width=3)
-                ))
-
-            fig.update_layout(
-                height=350, template='plotly_dark',
-                xaxis_title="Date", yaxis_title="Units Sold",
-                title=f"Last {show_days} Days of Demand Data"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-            # Two columns: distribution + patterns
-            c1, c2 = st.columns(2)
-
-            with c1:
-                st.subheader("📊 Demand Distribution")
-                fig_hist = go.Figure()
-                fig_hist.add_trace(go.Histogram(
-                    x=hist['y'], nbinsx=40,
-                    marker_color='#8b5cf6', opacity=0.8,
-                    name='Frequency'
-                ))
-                fig_hist.add_vline(x=hist['y'].mean(), line_dash="dash",
-                    line_color="#f59e0b",
-                    annotation_text=f"Mean: {hist['y'].mean():.1f}")
-                fig_hist.update_layout(
-                    height=300, template='plotly_dark',
-                    xaxis_title="Daily Demand (units)",
-                    yaxis_title="Frequency",
-                    showlegend=False
-                )
-                st.plotly_chart(fig_hist, use_container_width=True)
-
-            with c2:
-                st.subheader("📅 Weekly Pattern")
-                day_names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-                weekly_avg = hist.groupby('day_of_week')['y'].mean()
-                fig_week = go.Figure()
-                fig_week.add_trace(go.Bar(
-                    x=[day_names[i] for i in weekly_avg.index],
-                    y=weekly_avg.values,
-                    marker_color=['#3b82f6', '#3b82f6', '#3b82f6', '#3b82f6',
-                                  '#3b82f6', '#22c55e', '#22c55e'],
-                    text=[f'{v:.0f}' for v in weekly_avg.values],
-                    textposition='auto'
-                ))
-                fig_week.update_layout(
-                    height=300, template='plotly_dark',
-                    xaxis_title="Day of Week",
-                    yaxis_title="Avg Demand",
-                    showlegend=False
-                )
-                st.plotly_chart(fig_week, use_container_width=True)
-
-            # Monthly pattern
-            st.subheader("📆 Monthly Demand Pattern")
-            month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                           'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-            monthly_avg = hist.groupby('month')['y'].mean()
-            fig_month = go.Figure()
-            fig_month.add_trace(go.Bar(
-                x=[month_names[i - 1] for i in monthly_avg.index],
-                y=monthly_avg.values,
-                marker=dict(
-                    color=monthly_avg.values,
-                    colorscale='Viridis',
-                    showscale=True,
-                    colorbar=dict(title="Avg Demand")
-                ),
-                text=[f'{v:.0f}' for v in monthly_avg.values],
-                textposition='auto'
-            ))
-            fig_month.update_layout(
-                height=300, template='plotly_dark',
-                xaxis_title="Month",
-                yaxis_title="Avg Demand"
-            )
-            st.plotly_chart(fig_month, use_container_width=True)
-
-            st.divider()
-
-            # Raw data table
-            st.subheader("🗂️ Raw Data (scrollable)")
-            st.markdown(f"Showing last **200 rows** of {len(hist):,} total rows")
-            display_df = hist.tail(200).copy()
-            display_df['ds'] = display_df['ds'].dt.strftime('%Y-%m-%d')
-            display_df.columns = ['Date', 'Demand', 'Day of Week', 'Month']
-            day_map = {0: 'Mon', 1: 'Tue', 2: 'Wed', 3: 'Thu', 4: 'Fri', 5: 'Sat', 6: 'Sun'}
-            display_df['Day of Week'] = display_df['Day of Week'].map(day_map)
-            st.dataframe(display_df, use_container_width=True, height=400)
-
-        else:
-            st.warning("No data loaded yet. The data will be available after the first simulation step.")
-
-    # =================== COST ANALYSIS ===================
-    with tab4:
-        st.divider()
-        st.header("💰 Cost Analysis — Financial Impact")
-        st.markdown("Real-time supply chain costs based on simulation data")
-
-        # Cost parameters
-        HOLDING_COST_PER_UNIT = 0.50   # $/unit/day
-        STOCKOUT_COST_PER_UNIT = 15.0  # $/unit lost sale
-        SHIPPING_COST_PER_UNIT = 2.0   # $/unit shipped
-        ORDER_FIXED_COST = 50.0        # $/order placed
-
-        data = st.session_state.data
-        if data and len(data) > 0:
-            df = pd.DataFrame(data)
-            days_run = len(df)
-
-            # Calculate costs
-            total_holding = sum(r.get('inv_after', 0) * HOLDING_COST_PER_UNIT for r in data)
-            total_stockout = sum(
-                max(0, r.get('demand', 0) - r.get('fulfilled', 0)) * STOCKOUT_COST_PER_UNIT
-                for r in data
-            )
-            total_shipping = sum(r.get('fulfilled', 0) * SHIPPING_COST_PER_UNIT for r in data)
-            num_orders = sum(1 for r in data if r.get('fulfilled', 0) > 0)
-            total_order_cost = num_orders * ORDER_FIXED_COST
-            total_cost = total_holding + total_stockout + total_shipping + total_order_cost
-
-            # Cost parameters display
-            with st.expander("📋 Cost Parameters (per unit)", expanded=False):
-                p1, p2, p3, p4 = st.columns(4)
-                p1.metric("Holding Cost", f"${HOLDING_COST_PER_UNIT}/unit/day")
-                p2.metric("Stockout Penalty", f"${STOCKOUT_COST_PER_UNIT}/unit")
-                p3.metric("Shipping Cost", f"${SHIPPING_COST_PER_UNIT}/unit")
-                p4.metric("Order Fixed Cost", f"${ORDER_FIXED_COST}/order")
-
-            # Total cost KPIs
-            st.subheader("📊 Cost Summary")
-            k1, k2, k3, k4, k5 = st.columns(5)
-            k1.metric("💵 Total Cost", f"${total_cost:,.0f}")
-            k2.metric("📦 Holding", f"${total_holding:,.0f}")
-            k3.metric("❌ Stockout", f"${total_stockout:,.0f}")
-            k4.metric("🚚 Shipping", f"${total_shipping:,.0f}")
-            k5.metric("📝 Orders", f"${total_order_cost:,.0f}")
-
-            # Cost breakdown pie chart
-            c1, c2 = st.columns(2)
-            with c1:
-                st.subheader("🥧 Cost Breakdown")
-                fig_pie = go.Figure(data=[go.Pie(
-                    labels=['Holding', 'Stockout Penalty', 'Shipping', 'Order Costs'],
-                    values=[total_holding, total_stockout, total_shipping, total_order_cost],
-                    marker_colors=['#3b82f6', '#ef4444', '#22c55e', '#f59e0b'],
-                    textinfo='label+percent',
-                    hole=0.4
-                )])
-                fig_pie.update_layout(height=350, template='plotly_dark',
-                    title="Where Does Money Go?")
-                st.plotly_chart(fig_pie, use_container_width=True)
-
-            with c2:
-                st.subheader("📈 Daily Cost Trend")
-                daily_holding = [r.get('inv_after', 0) * HOLDING_COST_PER_UNIT for r in data]
-                daily_stockout = [max(0, r.get('demand', 0) - r.get('fulfilled', 0)) * STOCKOUT_COST_PER_UNIT for r in data]
-                daily_shipping = [r.get('fulfilled', 0) * SHIPPING_COST_PER_UNIT for r in data]
-                days_list = [r.get('day', i+1) for i, r in enumerate(data)]
-
-                fig_cost = go.Figure()
-                fig_cost.add_trace(go.Scatter(x=days_list, y=daily_holding,
-                    name='Holding', fill='tozeroy',
-                    line=dict(color='#3b82f6'), stackgroup='costs'))
-                fig_cost.add_trace(go.Scatter(x=days_list, y=daily_stockout,
-                    name='Stockout', fill='tonexty',
-                    line=dict(color='#ef4444'), stackgroup='costs'))
-                fig_cost.add_trace(go.Scatter(x=days_list, y=daily_shipping,
-                    name='Shipping', fill='tonexty',
-                    line=dict(color='#22c55e'), stackgroup='costs'))
-                fig_cost.update_layout(height=350, template='plotly_dark',
-                    xaxis_title="Day", yaxis_title="Cost ($)",
-                    title="Stacked Daily Costs")
-                st.plotly_chart(fig_cost, use_container_width=True)
-
-            # Cost per unit fulfilled
-            total_fulfilled = sum(r.get('fulfilled', 0) for r in data)
-            if total_fulfilled > 0:
-                cost_per_unit = total_cost / total_fulfilled
-                st.metric("💲 Cost Per Unit Fulfilled", f"${cost_per_unit:.2f}",
-                          help="Total cost divided by total units successfully shipped to customers")
-        else:
-            st.info("▶️ Run the simulation to see cost analysis!")
-
-    # =================== ARCHITECTURE ===================
-    with tab4:
-        st.divider()
-        st.header("🏗️ System Architecture")
-        st.markdown("Interactive view of how all components connect")
-
-        arch_html = """
-        <style>
-            .arch-container { 
-                font-family: 'Segoe UI', sans-serif; 
-                padding: 20px; 
-                background: linear-gradient(135deg, #0f172a, #1e293b); 
-                border-radius: 16px;
-                color: white;
-            }
-            .arch-row { display: flex; justify-content: center; gap: 20px; margin: 15px 0; flex-wrap: wrap; }
-            .arch-box {
-                padding: 16px 24px; border-radius: 12px; text-align: center;
-                min-width: 140px; transition: transform 0.2s, box-shadow 0.2s;
-                cursor: pointer; position: relative;
-            }
-            .arch-box:hover { transform: translateY(-4px); box-shadow: 0 8px 25px rgba(0,0,0,0.4); }
-            .arch-box h4 { margin: 0 0 4px 0; font-size: 14px; }
-            .arch-box p { margin: 0; font-size: 11px; opacity: 0.8; }
-            .data { background: linear-gradient(135deg, #059669, #10b981); }
-            .ml { background: linear-gradient(135deg, #7c3aed, #8b5cf6); }
-            .agent { background: linear-gradient(135deg, #2563eb, #3b82f6); }
-            .infra { background: linear-gradient(135deg, #d97706, #f59e0b); }
-            .orch { background: linear-gradient(135deg, #dc2626, #ef4444); }
-            .ui { background: linear-gradient(135deg, #0891b2, #06b6d4); }
-            .arrow { text-align: center; font-size: 24px; color: #64748b; margin: 5px 0; }
-            .layer-label { 
-                color: #94a3b8; font-size: 12px; text-transform: uppercase; 
-                letter-spacing: 2px; margin: 15px 0 5px; text-align: center; 
-            }
-        </style>
-        <div class="arch-container">
-            <div class="layer-label">🎯 Presentation Layer</div>
-            <div class="arch-row">
-                <div class="arch-box ui">
-                    <h4>🖥️ Streamlit Dashboard</h4>
-                    <p>12 interactive tabs</p>
-                </div>
-                <div class="arch-box ui">
-                    <h4>📊 Plotly Charts</h4>
-                    <p>Real-time visualization</p>
-                </div>
-            </div>
-            <div class="arrow">⬆️ ⬇️</div>
-            
-            <div class="layer-label">🔀 Orchestration Layer</div>
-            <div class="arch-row">
-                <div class="arch-box orch">
-                    <h4>🔀 LangGraph</h4>
-                    <p>State machine workflow</p>
-                    <p>NORMAL → EMERGENCY → CRISIS</p>
-                </div>
-                <div class="arch-box orch">
-                    <h4>🧠 Explainability</h4>
-                    <p>XAI decision records</p>
-                    <p>WHY explanations</p>
-                </div>
-            </div>
-            <div class="arrow">⬆️ ⬇️</div>
-
-            <div class="layer-label">🤖 Agent Layer (Mesa Framework)</div>
-            <div class="arch-row">
-                <div class="arch-box agent">
-                    <h4>🏭 Supplier Agent</h4>
-                    <p>Order processing</p>
-                </div>
-                <div class="arch-box agent">
-                    <h4>📦 Warehouse Agent</h4>
-                    <p>Inventory management</p>
-                </div>
-                <div class="arch-box agent">
-                    <h4>🚚 Logistics Agent</h4>
-                    <p>Shipment scheduling</p>
-                </div>
-                <div class="arch-box agent">
-                    <h4>📈 Demand Agent</h4>
-                    <p>Demand forecasting</p>
-                </div>
-            </div>
-            <div class="arrow">⬆️ ⬇️</div>
-
-            <div class="layer-label">🧠 Intelligence Layer</div>
-            <div class="arch-row">
-                <div class="arch-box ml">
-                    <h4>🤖 Groq LLM</h4>
-                    <p>LLaMA 3.1 8B Instant</p>
-                    <p>via LangChain</p>
-                </div>
-                <div class="arch-box ml">
-                    <h4>📊 LSTM Forecaster</h4>
-                    <p>TensorFlow/Keras</p>
-                    <p>Demand prediction</p>
-                </div>
-                <div class="arch-box infra">
-                    <h4>📡 Message Bus</h4>
-                    <p>Inter-agent comms</p>
-                </div>
-                <div class="arch-box infra">
-                    <h4>🧠 ChromaDB</h4>
-                    <p>Vector memory</p>
-                    <p>Episode storage</p>
-                </div>
-            </div>
-            <div class="arrow">⬆️ ⬇️</div>
-
-            <div class="layer-label">📂 Data Layer</div>
-            <div class="arch-row">
-                <div class="arch-box data">
-                    <h4>🏪 M5 Walmart Dataset</h4>
-                    <p>30,490 products × 1,941 days</p>
-                </div>
-                <div class="arch-box data">
-                    <h4>📝 Simulation Logs</h4>
-                    <p>Event history & metrics</p>
-                </div>
-            </div>
+        st.markdown("""
+        <div style="padding:8px 0 20px 0">
+            <h2 style="margin:0 0 6px 0;font-size:1.8rem">⚙️ Deep Dive &amp; Logs</h2>
+            <p style="color:#94a3b8;font-size:13px;margin:0">Detailed views of data, architecture, memory, and forecast accuracy — organized in expandable sections</p>
         </div>
-        """
-        import streamlit.components.v1 as components
-        components.html(arch_html, height=700, scrolling=True)
+        """, unsafe_allow_html=True)
 
-        # Tech stack summary
-        st.subheader("🛠️ Technology Stack")
-        tech_data = {
-            'Component': ['Agent Framework', 'LLM Provider', 'LLM Model', 'Orchestration',
-                        'Memory/Vector DB', 'Forecasting', 'Dashboard', 'Visualization',
-                        'Dataset', 'Language'],
-            'Technology': ['Mesa (ABM)', 'Groq Cloud', 'LLaMA 3.1 8B', 'LangGraph',
-                         'ChromaDB', 'LSTM (TensorFlow)', 'Streamlit', 'Plotly',
-                         'Walmart M5', 'Python 3.10'],
-            'Purpose': ['Multi-agent simulation', 'Fast LLM inference', 'Reasoning & decisions',
-                       'Workflow state machine', 'Episodic agent memory',
-                       'Time-series demand prediction', 'Interactive UI',
-                       'Charts & graphs', 'Real retail data', 'Core language']
-        }
-        st.dataframe(pd.DataFrame(tech_data), use_container_width=True, hide_index=True)
-
-    # =================== AGENT COMMS ===================
-    with tab2:
-        st.divider()
-        st.header("💬 Live Agent Comms")
-        agent_avatars = {"Supplier": "🏭", "Warehouse": "📦", "Logistics": "🚚", "Demand": "📈", "System": "☁️", "Intel": "🧠"}
-        bus = model.bus if hasattr(model, 'bus') else None
-        if bus and hasattr(bus, 'history'):
-            for msg in bus.history[-20:]:
-                sender = getattr(msg, 'sender', 'System')
-                content = getattr(msg, 'content', str(msg))
-                with st.chat_message(name=sender, avatar=agent_avatars.get(sender, "🤖")):
-                    st.markdown(f"**@{getattr(msg, 'recipient', 'All')}** — {content}")
-        else:
-            st.info("Message bus not available.")
-
-
-    # =================== MEMORY EXPLORER ===================
-    with tab2:
-        st.divider()
-        st.header("🧠 Memory Explorer — What Agents Have Learned")
-        st.markdown("Agents store past experiences in ChromaDB and recall them for better decisions")
-
-        if hasattr(model, 'get_memory_stats'):
-            mem_stats = model.get_memory_stats()
-
-            if mem_stats:
-                # Overview metrics
-                cols = st.columns(len(mem_stats))
-                for i, (agent_name, stats) in enumerate(mem_stats.items()):
-                    with cols[i]:
-                        total = stats.get('total_episodes', 0)
-                        rate = stats.get('success_rate', 0)
-                        st.metric(f"🤖 {agent_name}", f"{total} episodes")
-                        st.progress(rate, text=f"Success: {rate:.0%}")
-
+        # ---- Expander 1: Data Explorer ----
+        with st.expander("🗂️ Data Explorer — Training Dataset", expanded=False):
+            _dl = st.session_state.dl
+            _hist = _dl.historical_data
+            _summary = _dl.get_data_summary()
+            if _hist is not None and _summary is not None:
+                _sname = "Walmart M5 Forecasting Competition" if _summary['source']=='m5' else "Enhanced Synthetic Data"
+                _semoji = "🏪" if _summary['source']=='m5' else "🔧"
+                st.markdown(f"""
+                ### {_semoji} Dataset: **{_sname}**
+                | Property | Value |
+                |----------|-------|
+                | **Source** | {_sname} |
+                | **Total Days** | {_summary['total_days']:,} |
+                | **Date Range** | {_summary['date_range']} |
+                | **Mean Daily Demand** | {_summary['mean_demand']} units |
+                | **Std Deviation** | {_summary['std_demand']} units |
+                | **Min / Max** | {_summary['min_demand']} / {_summary['max_demand']} units |
+                """)
+                if _summary['source']=='m5':
+                    st.info("📋 **About M5:** Real daily Walmart sales from CA, TX, WI. Store CA\\_1, Item FOODS\\_3\\_090 — realistic demand with weekday/weekend cycles, seasonal trends, and promo spikes.")
                 st.divider()
+                _show = min(365, len(_hist))
+                _rec = _hist.tail(_show)
+                _fh = go.Figure()
+                _fh.add_trace(go.Scatter(x=_rec['ds'], y=_rec['y'], name='Daily Demand', line=dict(color='#3b82f6', width=1), opacity=0.6))
+                if len(_rec) >= 30:
+                    _fh.add_trace(go.Scatter(x=_rec['ds'], y=_rec['y'].rolling(30).mean(), name='30-Day MA', line=dict(color='#f59e0b', width=3)))
+                _fh.update_layout(height=320, template='plotly_dark', xaxis_title="Date", yaxis_title="Units Sold", title=f"Last {_show} Days of Demand Data")
+                st.plotly_chart(_fh, use_container_width=True)
+                _dc1, _dc2 = st.columns(2)
+                with _dc1:
+                    st.subheader("📊 Demand Distribution")
+                    _fdh = go.Figure()
+                    _fdh.add_trace(go.Histogram(x=_hist['y'], nbinsx=40, marker_color='#8b5cf6', opacity=0.8))
+                    _fdh.add_vline(x=_hist['y'].mean(), line_dash="dash", line_color="#f59e0b", annotation_text=f"Mean: {_hist['y'].mean():.1f}")
+                    _fdh.update_layout(height=280, template='plotly_dark', xaxis_title="Demand", yaxis_title="Frequency", showlegend=False)
+                    st.plotly_chart(_fdh, use_container_width=True)
+                with _dc2:
+                    st.subheader("📅 Weekly Pattern")
+                    _dn = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+                    _wa = _hist.groupby('day_of_week')['y'].mean()
+                    _fwk = go.Figure()
+                    _fwk.add_trace(go.Bar(x=[_dn[i] for i in _wa.index], y=_wa.values, marker_color=['#3b82f6']*5+['#22c55e']*2, text=[f'{v:.0f}' for v in _wa.values], textposition='auto'))
+                    _fwk.update_layout(height=280, template='plotly_dark', xaxis_title="Day", yaxis_title="Avg Demand", showlegend=False)
+                    st.plotly_chart(_fwk, use_container_width=True)
+                st.divider()
+                st.subheader("🗂️ Raw Data (last 200 rows)")
+                _ddf = _hist.tail(200).copy()
+                _ddf['ds'] = _ddf['ds'].dt.strftime('%Y-%m-%d')
+                _ddf.columns = ['Date','Demand','Day of Week','Month']
+                _ddf['Day of Week'] = _ddf['Day of Week'].map({0:'Mon',1:'Tue',2:'Wed',3:'Thu',4:'Fri',5:'Sat',6:'Sun'})
+                st.dataframe(_ddf, use_container_width=True, height=350)
+            else:
+                st.warning("No data loaded yet. Run a simulation step first.")
 
-                # Per-agent details
-                for agent_name, stats in mem_stats.items():
-                    with st.expander(f"🧠 {agent_name} Agent Memory", expanded=(agent_name == 'Warehouse')):
-                        st.markdown(f"""
-                        | Metric | Value |
-                        |--------|-------|
-                        | Total Episodes | **{stats.get('total_episodes', 0)}** |
-                        | Success Rate | **{stats.get('success_rate', 0):.1%}** |
-                        """)
+        # ---- Expander 2: System Architecture ----
+        with st.expander("🧱 System Architecture", expanded=False):
+            _ah = """
+            <style>.ac{font-family:'Segoe UI',sans-serif;padding:20px;background:linear-gradient(135deg,#0f172a,#1e293b);border-radius:16px;color:white}.ar{display:flex;justify-content:center;gap:20px;margin:15px 0;flex-wrap:wrap}.ab{padding:16px 24px;border-radius:12px;text-align:center;min-width:130px;transition:transform 0.2s}.ab:hover{transform:translateY(-4px);box-shadow:0 8px 25px rgba(0,0,0,0.4)}.ab h4{margin:0 0 4px 0;font-size:14px}.ab p{margin:0;font-size:11px;opacity:.8}.da{background:linear-gradient(135deg,#059669,#10b981)}.ml{background:linear-gradient(135deg,#7c3aed,#8b5cf6)}.ag{background:linear-gradient(135deg,#2563eb,#3b82f6)}.inf{background:linear-gradient(135deg,#d97706,#f59e0b)}.or{background:linear-gradient(135deg,#dc2626,#ef4444)}.ui{background:linear-gradient(135deg,#0891b2,#06b6d4)}.aw{text-align:center;font-size:22px;color:#64748b;margin:4px 0}.ll{color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:2px;margin:14px 0 4px;text-align:center}</style>
+            <div class="ac"><div class="ll">🎯 Presentation</div><div class="ar"><div class="ab ui"><h4>🖥️ Streamlit</h4><p>4-tab UI</p></div><div class="ab ui"><h4>📊 Plotly Charts</h4><p>Visualization</p></div></div><div class="aw">⬆️⬇️</div><div class="ll">🔀 Orchestration</div><div class="ar"><div class="ab or"><h4>🔀 LangGraph</h4><p>NORMAL→EMERGENCY→CRISIS</p></div><div class="ab or"><h4>🧠 Explainability</h4><p>XAI decision records</p></div></div><div class="aw">⬆️⬇️</div><div class="ll">🤖 Agent Layer (Mesa)</div><div class="ar"><div class="ab ag"><h4>🏭 Supplier</h4><p>Order processing</p></div><div class="ab ag"><h4>📦 Warehouse</h4><p>Inventory mgmt</p></div><div class="ab ag"><h4>🚚 Logistics</h4><p>Shipment scheduling</p></div><div class="ab ag"><h4>📈 Demand</h4><p>Demand forecasting</p></div></div><div class="aw">⬆️⬇️</div><div class="ll">🧠 Intelligence</div><div class="ar"><div class="ab ml"><h4>🤖 Groq LLM</h4><p>LLaMA 3.1 8B</p></div><div class="ab ml"><h4>📊 LSTM</h4><p>TensorFlow/Keras</p></div><div class="ab inf"><h4>📡 Message Bus</h4><p>Inter-agent comms</p></div><div class="ab inf"><h4>🧠 ChromaDB</h4><p>Vector memory</p></div></div><div class="aw">⬆️⬇️</div><div class="ll">📂 Data Layer</div><div class="ar"><div class="ab da"><h4>🏪 M5 Walmart</h4><p>30,490 products × 1,941 days</p></div><div class="ab da"><h4>📝 Sim Logs</h4><p>Event history</p></div></div></div>"""
+            import streamlit.components.v1 as components
+            components.html(_ah, height=520, scrolling=True)
+            st.subheader("🛠️ Technology Stack")
+            _td = {'Component':['Agent Framework','LLM Provider','LLM Model','Orchestration','Memory/Vector DB','Forecasting','Dashboard','Visualization','Dataset','Language'],'Technology':['Mesa (ABM)','Groq Cloud','LLaMA 3.1 8B','LangGraph','ChromaDB','LSTM (TensorFlow)','Streamlit','Plotly','Walmart M5','Python 3.10'],'Purpose':['Multi-agent simulation','Fast LLM inference','Reasoning & decisions','Workflow state machine','Episodic agent memory','Time-series demand prediction','Interactive UI','Charts & graphs','Real retail data','Core language']}
+            st.dataframe(pd.DataFrame(_td), use_container_width=True, hide_index=True)
 
-                        # Try to show actual memory episodes
-                        agent_obj = None
-                        for name, obj in [('Supplier', model.supplier), ('Warehouse', model.warehouse),
-                                        ('Logistics', model.logistics), ('Demand', model.demand_agent)]:
-                            if name == agent_name and hasattr(obj, 'memory'):
-                                agent_obj = obj
-                                break
-
-                        if agent_obj and hasattr(agent_obj.memory, 'episodes'):
-                            episodes = agent_obj.memory.episodes
-                            if episodes:
-                                st.markdown("#### 📝 Recent Episodes")
-                                for ep in episodes[-5:]:
-                                    situation = ep.get('situation', 'N/A')[:100]
-                                    decision = ep.get('decision', 'N/A')[:80]
-                                    success = '✅' if ep.get('outcome', {}).get('success') else '❌'
-                                    day = ep.get('day', '?')
-                                    st.markdown(f"""
-                                    **Day {day}** {success}  
-                                    📋 *Situation:* {situation}  
-                                    🎯 *Decision:* {decision}
-                                    ---
-                                    """)
+        # ---- Expander 3: Agent Learning Memory ----
+        with st.expander("🧠 Agent Learning Memory", expanded=False):
+            st.markdown("Agents store past experiences in ChromaDB and recall them for better future decisions")
+            if hasattr(model, 'get_memory_stats'):
+                _ms = model.get_memory_stats()
+                if _ms:
+                    _mc = st.columns(len(_ms))
+                    for _mi, (_an, _st) in enumerate(_ms.items()):
+                        with _mc[_mi]:
+                            st.metric(f"🤖 {_an}", f"{_st.get('total_episodes',0)} episodes")
+                            st.progress(_st.get('success_rate',0), text=f"Success: {_st.get('success_rate',0):.0%}")
+                    st.divider()
+                    for _an, _st in _ms.items():
+                        with st.expander(f"🧠 {_an} Memory", expanded=(_an=='Warehouse')):
+                            st.markdown(f"Episodes: **{_st.get('total_episodes',0)}** | Success Rate: **{_st.get('success_rate',0):.1%}**")
+                            _ao = None
+                            for _nn, _oo in [('Supplier',model.supplier),('Warehouse',model.warehouse),('Logistics',model.logistics),('Demand',model.demand_agent)]:
+                                if _nn==_an and hasattr(_oo,'memory'): _ao=_oo; break
+                            if _ao and hasattr(_ao.memory,'episodes') and _ao.memory.episodes:
+                                for _ep in _ao.memory.episodes[-3:]:
+                                    _ok = '✅' if _ep.get('outcome',{}).get('success') else '❌'
+                                    st.markdown(f"**Day {_ep.get('day','?')}** {_ok} — {_ep.get('decision','N/A')[:80]}")
                             else:
-                                st.info("No episodes stored yet. Run simulation steps to build memory.")
-
-                        # Show recall example
-                        if agent_obj and hasattr(agent_obj.memory, 'recall_similar'):
-                            similar = agent_obj.memory.recall_similar("inventory low, demand high", n_results=3)
-                            if similar:
-                                st.markdown("#### 🔍 Recall: 'inventory low, demand high'")
-                                for s in similar:
-                                    st.code(str(s)[:200], language='text')
+                                st.info("No episodes yet for this agent.")
+                else:
+                    st.info("No memory data yet. Run more simulation steps.")
             else:
-                st.info("No memory data available yet. Run a few simulation steps!")
-        else:
-            st.info("Memory not available. Switch to **agentic** mode for memory features.")
+                st.info("Memory not available. Switch to **agentic** mode.")
 
-    # =================== FORECAST ACCURACY ===================
-    with tab4:
-        st.divider()
-        st.header("🎯 Forecast Accuracy — Predicted vs Actual")
-        st.markdown("How well is the LSTM model predicting demand?")
-
-        data = st.session_state.data
-        if data and len(data) >= 3:
-            df = pd.DataFrame(data)
-
-            # Track predictions vs actuals
-            actuals = [r.get('demand', 0) for r in data]
-            # Get forecaster predictions for comparison
-            fc = st.session_state.fc
-            predictions = []
-            for i, r in enumerate(data):
-                try:
-                    pred = fc.predict_next()
-                    predictions.append(pred)
-                except Exception:
-                    predictions.append(actuals[i] if i < len(actuals) else 100)
-
-            days_list = [r.get('day', i+1) for i, r in enumerate(data)]
-
-            # Calculate error metrics
-            import numpy as np
-            actuals_arr = np.array(actuals, dtype=float)
-            preds_arr = np.array(predictions[:len(actuals)], dtype=float)
-            errors = actuals_arr - preds_arr
-            mae = np.mean(np.abs(errors))
-            rmse = np.sqrt(np.mean(errors**2))
-            mape = np.mean(np.abs(errors / np.maximum(actuals_arr, 1))) * 100
-
-            # Metrics
-            m1, m2, m3, m4 = st.columns(4)
-            m1.metric("📏 MAE", f"{mae:.1f} units", help="Mean Absolute Error")
-            m2.metric("📐 RMSE", f"{rmse:.1f} units", help="Root Mean Squared Error")
-            m3.metric("📊 MAPE", f"{mape:.1f}%", help="Mean Absolute Percentage Error")
-            accuracy = max(0, 100 - mape)
-            m4.metric("🎯 Accuracy", f"{accuracy:.1f}%",
-                      delta=f"{'Good' if accuracy > 85 else 'Needs improvement'}")
-
-            # Predicted vs Actual chart
-            st.subheader("📈 Predicted vs Actual Demand")
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=days_list, y=actuals,
-                name='Actual Demand', line=dict(color='#3b82f6', width=3)))
-            fig.add_trace(go.Scatter(x=days_list, y=predictions[:len(days_list)],
-                name='Predicted', line=dict(color='#f59e0b', width=2, dash='dash')))
-            fig.update_layout(height=350, template='plotly_dark',
-                xaxis_title="Day", yaxis_title="Demand (units)",
-                title="Forecast vs Reality")
-            st.plotly_chart(fig, use_container_width=True)
-
-            # Error distribution
-            c1, c2 = st.columns(2)
-            with c1:
-                st.subheader("📊 Error Distribution")
-                fig_err = go.Figure()
-                fig_err.add_trace(go.Histogram(
-                    x=errors, nbinsx=20,
-                    marker_color='#8b5cf6', opacity=0.8
-                ))
-                fig_err.add_vline(x=0, line_dash="dash", line_color="#22c55e",
-                    annotation_text="Perfect (0 error)")
-                fig_err.update_layout(height=300, template='plotly_dark',
-                    xaxis_title="Error (Actual - Predicted)",
-                    yaxis_title="Frequency")
-                st.plotly_chart(fig_err, use_container_width=True)
-
-            with c2:
-                st.subheader("📉 Cumulative Error")
-                cum_error = np.cumsum(np.abs(errors))
-                fig_cum = go.Figure()
-                fig_cum.add_trace(go.Scatter(
-                    x=days_list, y=cum_error,
-                    fill='tozeroy',
-                    line=dict(color='#ef4444', width=2)
-                ))
-                fig_cum.update_layout(height=300, template='plotly_dark',
-                    xaxis_title="Day", yaxis_title="Cumulative |Error|")
-                st.plotly_chart(fig_cum, use_container_width=True)
-
-            # Forecast accuracy rating
-            if accuracy >= 90:
-                st.success(f"🏆 **Excellent forecast accuracy!** {accuracy:.1f}% — the LSTM model is performing very well.")
-            elif accuracy >= 75:
-                st.warning(f"⚠️ **Decent accuracy:** {accuracy:.1f}% — model captures trends but has some variance.")
+        # ---- Expander 4: ML Forecast Accuracy ----
+        with st.expander("🎯 ML Forecast Accuracy", expanded=False):
+            st.markdown("How well is the LSTM model predicting demand?")
+            _fd = st.session_state.data
+            if _fd and len(_fd) >= 3:
+                import numpy as np
+                _ac = [r.get('demand',0) for r in _fd]
+                _fco = st.session_state.fc
+                _pp = []
+                for _pi, _pr in enumerate(_fd):
+                    try: _pp.append(_fco.predict_next())
+                    except: _pp.append(_ac[_pi] if _pi < len(_ac) else 100)
+                _dl2 = [r.get('day',i+1) for i,r in enumerate(_fd)]
+                _aa = np.array(_ac, dtype=float); _pa = np.array(_pp[:len(_ac)], dtype=float)
+                _er = _aa - _pa
+                _mae = np.mean(np.abs(_er)); _rmse = np.sqrt(np.mean(_er**2))
+                _mpe = np.mean(np.abs(_er / np.maximum(_aa,1))) * 100
+                _acc = max(0, 100 - _mpe)
+                _fm1, _fm2, _fm3, _fm4 = st.columns(4)
+                _fm1.metric("📏 MAE", f"{_mae:.1f} units", help="Mean Absolute Error")
+                _fm2.metric("📐 RMSE", f"{_rmse:.1f} units")
+                _fm3.metric("📊 MAPE", f"{_mpe:.1f}%")
+                _fm4.metric("🎯 Accuracy", f"{_acc:.1f}%", delta='Good' if _acc > 85 else 'Needs improvement')
+                _ffa = go.Figure()
+                _ffa.add_trace(go.Scatter(x=_dl2, y=_ac, name='Actual Demand', line=dict(color='#3b82f6', width=3)))
+                _ffa.add_trace(go.Scatter(x=_dl2, y=_pp[:len(_dl2)], name='Predicted', line=dict(color='#f59e0b', width=2, dash='dash')))
+                _ffa.update_layout(height=320, template='plotly_dark', xaxis_title="Day", yaxis_title="Demand", title="Forecast vs Reality")
+                st.plotly_chart(_ffa, use_container_width=True)
+                _fec1, _fec2 = st.columns(2)
+                with _fec1:
+                    st.subheader("📊 Error Distribution")
+                    _fef = go.Figure()
+                    _fef.add_trace(go.Histogram(x=_er, nbinsx=20, marker_color='#8b5cf6', opacity=0.8))
+                    _fef.add_vline(x=0, line_dash="dash", line_color="#22c55e", annotation_text="Perfect")
+                    _fef.update_layout(height=260, template='plotly_dark', xaxis_title="Error", yaxis_title="Count")
+                    st.plotly_chart(_fef, use_container_width=True)
+                with _fec2:
+                    st.subheader("📉 Cumulative Error")
+                    _fef2 = go.Figure()
+                    _fef2.add_trace(go.Scatter(x=_dl2, y=np.cumsum(np.abs(_er)), fill='tozeroy', line=dict(color='#ef4444', width=2)))
+                    _fef2.update_layout(height=260, template='plotly_dark', xaxis_title="Day", yaxis_title="Cumulative |Error|")
+                    st.plotly_chart(_fef2, use_container_width=True)
+                if _acc >= 90: st.success(f"🏆 **Excellent!** {_acc:.1f}% — LSTM performing very well.")
+                elif _acc >= 75: st.warning(f"⚠️ **Decent:** {_acc:.1f}% — captures trends but has variance.")
+                else: st.error(f"❌ **Low:** {_acc:.1f}% — model may need more training data.")
             else:
-                st.error(f"❌ **Low accuracy:** {accuracy:.1f}% — model may need more training data or tuning.")
-        else:
-            st.info("▶️ Run at least 3 simulation steps to see forecast accuracy!")
+                st.info("▶️ Run at least 3 simulation steps to see forecast accuracy.")
+
 
     # =================== SIDEBAR ===================
     with st.sidebar:
