@@ -1661,7 +1661,7 @@ def main():
             else:
                 st.info(f"🤝 **Tie!** Both at {af}%")
 
-            # ---- The Story Behind the Data (Explanation for Guides/Audits) ----
+            # ---- The Story Behind the Data (Cards) ----
             st.markdown("---")
             st.subheader("🔍 Performance Analysis")
             st.markdown("Both models faced the exact same low starting inventory, demand surges, and disruptions.")
@@ -1669,20 +1669,28 @@ def main():
             ex1, ex2 = st.columns(2)
             with ex1:
                 st.markdown("""
-                ### 🤖 Why the AI Succeeds
-                - **Anticipates Spikes**: Predicts rising demand organically via LSTM and external intelligence.
-                - **Proactive Buffering**: Orders safety stock *before* impending supplier/logistics disruptions hit.
-                - **Smart Conservation**: Pauses failed reorders during outages, relying entirely on built-up buffers.
-                - **Result**: Trades slightly higher holding costs for a perfect fill rate and zero stockout penalties.
-                """)
+                <div style='background:rgba(139,92,246,0.1); border:1px solid #8b5cf6; border-radius:10px; padding:15px; height:100%;'>
+                    <h4 style='color:#a78bfa; margin-top:0;'>🤖 Why the AI Succeeds</h4>
+                    <ul style='margin-bottom:0; padding-left:20px; font-size:14px; line-height:1.6;'>
+                        <li><b>Anticipates Spikes:</b> Predicts demand organically via LSTM & Intelligence.</li>
+                        <li><b>Proactive Buffering:</b> Orders safety stock <em>before</em> disruptions hit.</li>
+                        <li><b>Smart Conservation:</b> Pauses unfulfillable orders during outages.</li>
+                        <li><b>Result:</b> Slightly higher holding cost, but perfect fill rate & zero penalties.</li>
+                    </ul>
+                </div>
+                """, unsafe_allow_html=True)
             with ex2:
                 st.markdown("""
-                ### 📐 Why Rules Collapse
-                - **Blind spot**: Ignores impending disruptions since stock is technically above the static minimum buffer.
-                - **The Trap**: Re-orders *only after* stock crashes, but by then, the supplier or logistics are offline.
-                - **Death Spiral**: Continually fails to reorder during the outage, suffering massive consecutive stockouts.
-                - **Result**: Suffers huge financial penalties and poor customer satisfaction from missing fulfillments.
-                """)
+                <div style='background:rgba(234,179,8,0.1); border:1px solid #eab308; border-radius:10px; padding:15px; height:100%;'>
+                    <h4 style='color:#fde047; margin-top:0;'>📐 Why Rules Collapse</h4>
+                    <ul style='margin-bottom:0; padding-left:20px; font-size:14px; line-height:1.6;'>
+                        <li><b>Blind Spot:</b> Ignores impending disruptions if stock is above static minimum.</li>
+                        <li><b>The Trap:</b> Triggers re-orders only <em>after</em> stock crashes during an outage.</li>
+                        <li><b>Death Spiral:</b> Suffers consecutive stockouts while supplier is offline.</li>
+                        <li><b>Result:</b> Massive financial penalties and disastrous customer satisfaction.</li>
+                    </ul>
+                </div>
+                """, unsafe_allow_html=True)
 
     # =================== TAB 4: DEEP DIVE & LOGS ===================
     with tab4:
