@@ -19,6 +19,7 @@ langgraph>=1.0.0
 
 # Vector memory
 chromadb>=0.4.0
+protobuf<=3.20.3
 
 # Real-time news search
 duckduckgo-search>=6.0.0
