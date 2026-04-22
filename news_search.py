@@ -372,7 +372,12 @@ Analyze the combined impact on our supply chain. Respond in EXACTLY this JSON fo
     "logistics_delay_days": 0 to 3,
     "reliability_adjustment": -0.25 to 0.0,
     "recommendation": "one-line recommendation for the supply chain manager",
-    "alert_message": "one dramatic alert message for the agent chat (like a news anchor)"
+    "alert_message": "one dramatic alert message for the agent chat (like a news anchor)",
+    "disruption_forecast": {{
+        "supplier": {{"probability": 0.0 to 1.0, "severity": "low" or "medium" or "high", "reason": "brief reason"}},
+        "logistics": {{"probability": 0.0 to 1.0, "severity": "low" or "medium" or "high", "reason": "brief reason"}},
+        "warehouse": {{"probability": 0.0 to 1.0, "severity": "low" or "medium" or "high", "reason": "brief reason"}}
+    }}
 }}
 
 Be realistic. Clear skies = low risk. Only flag disruptions that would actually impact a grocery supply chain."""
@@ -424,10 +429,15 @@ Be realistic. Clear skies = low risk. Only flag disruptions that would actually 
         weather_impact = self.weather_service.get_supply_chain_impact() if weather else {}
         
         risk_level = weather_impact.get('impact', 'low')
+        risk_score = {'low': 0.1, 'medium': 0.4, 'high': 0.8}.get(risk_level, 0.1)
+
+        # Build a simple node-level disruption forecast based on risk score
+        node_probability = round(risk_score * 0.9, 2)
+        node_severity = risk_level
         
         analysis = {
             'risk_level': risk_level,
-            'risk_score': {'low': 0.1, 'medium': 0.4, 'high': 0.8}.get(risk_level, 0.1),
+            'risk_score': risk_score,
             'weather_impact': weather_impact.get('details', 'No significant weather impact'),
             'news_impact': f"Found {len(news)} news articles" if news else "No news data",
             'demand_adjustment': weather_impact.get('demand_multiplier', 1.0),
@@ -435,6 +445,11 @@ Be realistic. Clear skies = low risk. Only flag disruptions that would actually 
             'reliability_adjustment': weather_impact.get('reliability_adjustment', 0.0),
             'recommendation': 'Continue normal operations' if risk_level == 'low' else 'Monitor situation closely',
             'alert_message': weather_impact.get('details', 'No alerts'),
+            'disruption_forecast': {
+                'supplier': {'probability': node_probability, 'severity': node_severity, 'reason': 'Rule-based estimate from weather risk'},
+                'logistics': {'probability': node_probability, 'severity': node_severity, 'reason': 'Rule-based estimate from weather risk'},
+                'warehouse': {'probability': round(node_probability * 0.5, 2), 'severity': 'low', 'reason': 'Warehouse generally sheltered from external risk'},
+            },
             'weather_raw': weather,
             'news_raw': news,
             'source': 'rules',
@@ -459,6 +474,17 @@ Be realistic. Clear skies = low risk. Only flag disruptions that would actually 
             lines.append(f"📈 Demand adjustment: ×{a['demand_adjustment']:.1f}")
         if a.get('logistics_delay_days', 0) > 0:
             lines.append(f"🚚 Logistics delay: +{a['logistics_delay_days']} days")
+
+        # Render per-node disruption forecast if available
+        df = a.get('disruption_forecast', {})
+        if df:
+            lines.append("\n🔮 NODE DISRUPTION FORECAST:")
+            for node, info in df.items():
+                prob = info.get('probability', 0)
+                sev = info.get('severity', 'low').upper()
+                reason = info.get('reason', '')
+                bar = '🔴' if prob > 0.6 else ('🟡' if prob > 0.3 else '🟢')
+                lines.append(f"  {bar} {node.capitalize()}: {prob:.0%} risk ({sev}) — {reason}")
 
         return "\n".join(lines)
 
