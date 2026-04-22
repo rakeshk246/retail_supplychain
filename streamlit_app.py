@@ -549,7 +549,7 @@ def main():
 
     # =================== BUTTONS ===================
     # Check if HITL approval is blocking progression
-    _hitl_blocking = hasattr(model, 'hitl_pending') and model.hitl_pending
+    _hitl_blocking = bool(hasattr(model, 'hitl_pending') and model.hitl_pending)
     bc = st.columns(6)
     with bc[0]:
         next_day = st.button("▶️ Next Day", use_container_width=True, type="primary",
