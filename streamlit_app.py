@@ -1661,6 +1661,39 @@ def main():
             else:
                 st.info(f"🤝 **Tie!** Both at {af}%")
 
+            # ---- The Story Behind the Data (Explanation for Guides/Audits) ----
+            st.markdown("---")
+            st.subheader("🔍 What Actually Happened (The Story Behind the Data)")
+            st.markdown("""
+            This stress test runs two completely isolated supply chain models side-by-side using the exact same low starting inventory and experiencing the exact same sequence of demand and disruptions. Here is why their outcomes are so drastically different:
+            """)
+            
+            ex1, ex2 = st.columns(2)
+            with ex1:
+                st.markdown("""
+                ### 🤖 Why the AI Succeeds
+                **The Proactive Strategy**
+                
+                1. **Anticipating the Surge:** The `DemandAgent` uses its LSTM+Prophet forecasting combined with news/weather intelligence to predict rising demand *before* it happens.
+                2. **Smart Buffering:** The `WarehouseAgent` reads these forecasts off the `MessageBus`. Realizing its 300 units won't survive the upcoming demand, it orders extra safety stock *before* the hurricane hits.
+                3. **Surviving the Outage:** By Day 5, when the supplier goes offline, the AI warehouse is sitting on a large proactive buffer. 
+                4. **Conservation:** When the Logistics/Supplier agents broadcast their `disruption_alert` on the bus, the warehouse knows exactly how long the outage will last. It stops constantly ordering (which would fail anyway) and rides out the storm flawlessly.
+                
+                ***Result:*** It pays higher **Holding Costs** to store the extra water, but it avoids losing revenues and completely dodges the catastrophic $45/unit **Stockout Penalties**.
+                """)
+            with ex2:
+                st.markdown("""
+                ### 📐 Why Simple Rules Collapse
+                **The Reactive Failure (The Min-Max Trap)**
+                
+                1. **Blind to the Future:** A traditional min-max SAP/Oracle system does not look ahead. On Day 3, stock is above its hardcoded 200-unit minimum, so it blindly assumes everything is fine.
+                2. **The Day 5 Trap:** The hurricane hits. Demand spikes. The rules model fulfills the orders, leaving it completely depleted. *Now* it crosses the 200-unit threshold and triggers an urgent reorder.
+                3. **The Rejection:** It attempts to order, but the supplier is offline (disrupted by the storm). The order is rejected.
+                4. **The Death Spiral:** It faces the next 5 days of high demand with an empty warehouse. It tries to reorder every single day, and is rejected every single day. 
+                
+                ***Result:*** It pays very little Holding Cost because its warehouse is empty. But it accrues thousands of dollars in **Stockout Costs** and completely wrecks customer satisfaction.
+                """)
+
     # =================== TAB 4: DEEP DIVE & LOGS ===================
     with tab4:
         st.markdown("""
