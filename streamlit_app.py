@@ -7,12 +7,21 @@ import pandas as pd
 import json
 
 from data_layer import DataLayer
-from forecasting_module import DemandForecaster
+from forecasting_module import DemandForecaster, HAS_TENSORFLOW, HAS_PROPHET
 from orchestrator import OrchestratedSupplyChainModel
 from agentic_agents import LLMEngine, GroqRateLimitError
 from explainability import ExplainabilityEngine
 from message_bus import MessageBus
 from kpi_evaluator import KPIEvaluator
+
+# Accurate label for what forecaster is actually running
+if HAS_TENSORFLOW:
+    FORECAST_MODEL_LABEL = "LSTM Neural Net"
+elif HAS_PROPHET:
+    FORECAST_MODEL_LABEL = "Prophet"
+else:
+    FORECAST_MODEL_LABEL = "Moving Average (30-day)"
+
 
 
 # ==============================================================================
@@ -53,6 +62,14 @@ def run_one_step(model, kpi_eval, sim_data):
 
     # This will raise GroqRateLimitError if rate limit hit in agentic mode
     model.step()
+
+    # Apply demand spike multiplier if active (set by Demand Spike! button)
+    if getattr(model, '_demand_spike_remaining', 0) > 0:
+        spike_mult = getattr(model, '_demand_spike_multiplier', 1.6)
+        model.daily_demand = int(model.daily_demand * spike_mult)
+        model._demand_spike_remaining -= 1
+        if model._demand_spike_remaining == 0:
+            model.log_event('Disruption', '📈 Demand spike ended — returned to normal demand')
 
     fulfilled = min(model.daily_demand, inv_before)
     stockout = fulfilled < model.daily_demand
@@ -335,7 +352,7 @@ def render_narrative(record, model):
     |-----------|-------|--------|
     | **Mode** | {mode_text} | How decisions are made |
     | **Starting Inventory** | 📦 **{ib} units** | Stock available at start of day |
-    | **LSTM Forecast** | 🔮 {pred_text} | Model's prediction for today's demand |
+    | **{FORECAST_MODEL_LABEL} Forecast** | 🔮 {pred_text} | Model's prediction for today's demand |
     | **Actual Demand** | 🛒 **{dem} units** | What customers actually ordered |
     | **Fulfilled** | {'✅' if not so else '❌'} **{ful}/{dem} units** | How much we could ship |
     | **Ending Inventory** | 📦 **{ia} units** | Stock remaining after fulfillment |
@@ -582,13 +599,20 @@ def main():
         st.session_state['rate_limit_msg'] = str(e)
 
     if hurricane:
+        # Hurricane disrupts BOTH supplier and logistics (regional impact)
         model.inject_disruption('supplier', 4)
+        model.inject_disruption('logistics', 3)
+        model.log_event('Disruption', '🌪️ Hurricane! Supplier disrupted 4 days + Logistics disrupted 3 days')
         st.rerun()
     if road:
         model.inject_disruption('logistics', 3)
         st.rerun()
     if spike:
-        model.warehouse.inventory = max(0, model.warehouse.inventory - 300)
+        # Correctly simulate demand spike: set a 3-day multiplier on the model
+        # Demand agent will multiply base forecast by this for next 3 steps
+        model._demand_spike_remaining = getattr(model, '_demand_spike_remaining', 0) + 3
+        model._demand_spike_multiplier = 1.6  # 60% demand surge
+        model.log_event('Disruption', '📈 Demand Spike! 60% demand surge for 3 days')
         st.rerun()
     if reset:
         st.session_state.model = init_model(st.session_state.dl, st.session_state.fc, st.session_state.mode)
@@ -1675,8 +1699,8 @@ def main():
                 st.info("Memory not available. Switch to **agentic** mode.")
 
         # ---- Expander 4: ML Forecast Accuracy ----
-        with st.expander("🎯 ML Forecast Accuracy", expanded=False):
-            st.markdown("How well did the LSTM model predict demand — comparing **stored predictions vs actual realised demand** for each day.")
+        with st.expander(f"🎯 {FORECAST_MODEL_LABEL} Forecast Accuracy", expanded=False):
+            st.markdown(f"How well did the **{FORECAST_MODEL_LABEL}** predict demand — comparing **stored predictions vs actual realised demand** for each day.")
             _fd = st.session_state.data
             # Filter only records where an lstm_prediction was actually stored
             _valid = [r for r in _fd if r.get('lstm_prediction') is not None]
@@ -1702,10 +1726,10 @@ def main():
 
                 _ffa = go.Figure()
                 _ffa.add_trace(go.Scatter(x=_dl2, y=_ac, name="Actual Demand",    line=dict(color="#3b82f6", width=3)))
-                _ffa.add_trace(go.Scatter(x=_dl2, y=_pp, name="LSTM Prediction",  line=dict(color="#f59e0b", width=2, dash="dash")))
+                _ffa.add_trace(go.Scatter(x=_dl2, y=_pp, name=f"{FORECAST_MODEL_LABEL} Prediction",  line=dict(color="#f59e0b", width=2, dash="dash")))
                 _ffa.update_layout(height=320, template="plotly_dark",
                                    xaxis_title="Simulation Day", yaxis_title="Units",
-                                   title="LSTM Forecast vs Actual Demand (same-day comparison)")
+                                   title=f"{FORECAST_MODEL_LABEL} Forecast vs Actual Demand (same-day comparison)")
                 st.plotly_chart(_ffa, use_container_width=True)
 
                 _fec1, _fec2 = st.columns(2)

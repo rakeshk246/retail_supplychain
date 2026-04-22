@@ -672,6 +672,13 @@ class OrchestratedSupplyChainModel(Model):
         elif agent_type == 'logistics':
             self.logistics.status = 'disrupted'
             self.log_event('Disruption', f"Logistics DISRUPTED for {duration} days")
+            # Retroactively delay ALL in-transit shipments (real disruptions affect pipeline)
+            delay_days = 2
+            for shipment in self.logistics.shipments:
+                shipment['arrival_day'] += delay_days
+            if self.logistics.shipments:
+                self.log_event('Disruption',
+                    f"⚠️ {len(self.logistics.shipments)} in-transit shipment(s) delayed +{delay_days} days")
         return duration
 
     def _check_disruption_recovery(self):
