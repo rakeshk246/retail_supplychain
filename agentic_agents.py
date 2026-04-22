@@ -318,6 +318,23 @@ class AgenticSupplierAgent(Agent):
         # Get inter-agent messages
         bus_context = self.bus.format_for_prompt("Supplier", limit=5)
 
+        # NEW: Get intelligence context
+        intel_context = ""
+        if hasattr(self.model, 'demand_agent') and hasattr(self.model.demand_agent, 'last_analysis'):
+            analysis = self.model.demand_agent.last_analysis
+            if analysis:
+                intel_context = (
+                    f"SUPPLY CHAIN RISK:\n"
+                    f"Risk Level: {analysis.get('risk_level', 'low').upper()}\n"
+                    f"Weather Impact: {analysis.get('weather_impact', 'None')}\n"
+                    f"News: {analysis.get('news_impact', 'None')}\n"
+                    f"Alert: {analysis.get('alert_message', 'None')}\n\n"
+                    f"Given this risk level, should we:\n"
+                    f"- Prioritize fulfilling orders (maintain service)?\n"
+                    f"- Reduce fulfillment to preserve capacity?\n"
+                    f"- Warn warehouse about potential delays?\n"
+                )
+
         context = (
             f"Order received: {quantity} units\n"
             f"Status: {self.status} | Capacity: {self.capacity} | Reliability: {self.reliability:.0%}\n"
@@ -325,7 +342,8 @@ class AgenticSupplierAgent(Agent):
             f"Warehouse inventory: {self.model.warehouse.inventory}\n"
             f"Pending shipments: {len(self.model.logistics.shipments)}\n\n"
             f"{memory_context}\n\n"
-            f"{bus_context}"
+            f"{bus_context}\n\n"
+            f"{intel_context}"
         )
 
         response = self.llm_engine.reason(SUPPLIER_SYSTEM_PROMPT, context)
@@ -453,6 +471,23 @@ class AgenticWarehouseAgent(Agent):
         memory_context = self.memory.format_for_prompt(past_episodes)
         bus_context = self.bus.format_for_prompt("Warehouse", limit=5)
 
+        # NEW: Get intelligence context
+        intel_context = ""
+        if hasattr(self.model, 'demand_agent') and hasattr(self.model.demand_agent, 'last_analysis'):
+            analysis = self.model.demand_agent.last_analysis
+            if analysis:
+                intel_context = (
+                    f"EXTERNAL INTELLIGENCE:\n"
+                    f"Risk Level: {analysis.get('risk_level', 'low').upper()}\n"
+                    f"Risk Score: {analysis.get('risk_score', 0):.0%}\n"
+                    f"Weather Impact: {analysis.get('weather_impact', 'None')}\n"
+                    f"News Impact: {analysis.get('news_impact', 'None')}\n"
+                    f"Demand Adjustment: ×{analysis.get('demand_adjustment', 1.0):.1f}\n"
+                    f"Logistics Delay: +{analysis.get('logistics_delay_days', 0)} days\n"
+                    f"Supplier Reliability: {analysis.get('reliability_adjustment', 0):.0%}\n"
+                    f"Recommendation: {analysis.get('recommendation', 'Normal operations')}\n"
+                )
+
         context = (
             f"Inventory: {self.inventory} | Reorder point: {self.reorder_point}\n"
             f"Max capacity: {self.max_capacity} | Default reorder qty: {self.reorder_qty}\n"
@@ -463,7 +498,9 @@ class AgenticWarehouseAgent(Agent):
             f"Pending shipments: {len(self.model.logistics.shipments)}\n"
             f"Day: {self.model.current_day}\n\n"
             f"{memory_context}\n\n"
-            f"{bus_context}"
+            f"{bus_context}\n\n"
+            f"{intel_context}\n"
+            f"Given the intelligence data above, how much should we reorder?\n"
         )
 
         response = self.llm_engine.reason(WAREHOUSE_SYSTEM_PROMPT, context)
@@ -650,13 +687,33 @@ class AgenticLogisticsAgent(Agent):
         memory_context = self.memory.format_for_prompt(past)
         bus_context = self.bus.format_for_prompt("Logistics", limit=5)
 
+        # NEW: Get intelligence context
+        intel_context = ""
+        if hasattr(self.model, 'demand_agent') and hasattr(self.model.demand_agent, 'last_analysis'):
+            analysis = self.model.demand_agent.last_analysis
+            if analysis:
+                weather_raw = analysis.get('weather_raw', {})
+                intel_context = (
+                    f"LOGISTICS WEATHER IMPACT:\n"
+                    f"Current: {weather_raw.get('description', 'Unknown')}\n"
+                    f"Wind: {weather_raw.get('wind_speed', 0)} km/h\n"
+                    f"Rain: {weather_raw.get('rain', 0)}mm\n"
+                    f"Forecast Delay: +{analysis.get('logistics_delay_days', 0)} days\n\n"
+                    f"Decision options:\n"
+                    f"1. Expedite (+cost, -delay)\n"
+                    f"2. Normal route (+risk of forecast delay)\n"
+                    f"3. Delay (reduce shipping cost, warehouse can wait)\n"
+                )
+
         context = (
             f"Shipment: {quantity} units | Base lead time: {base_lead_time}d\n"
             f"Status: {self.status} | Pending: {len(self.shipments)}\n"
             f"Warehouse inventory: {self.model.warehouse.inventory}\n"
-            f"Demand: {self.model.daily_demand} | Day: {self.model.current_day}\n"
-            f"Days of stock: {self.model.warehouse.inventory / max(self.model.daily_demand, 1):.1f}\n\n"
-            f"{memory_context}\n\n{bus_context}"
+            f"Demand: {getattr(self.model, 'daily_demand', getattr(self.model.warehouse, 'demand_history', [100])[-1] if hasattr(self.model.warehouse, 'demand_history') and self.model.warehouse.demand_history else 100)} | Day: {self.model.current_day}\n"
+            f"Days of stock: {self.model.warehouse.inventory / max(getattr(self.model, 'daily_demand', 100), 1):.1f}\n\n"
+            f"{memory_context}\n\n"
+            f"{bus_context}\n\n"
+            f"{intel_context}"
         )
 
         response = self.llm_engine.reason(LOGISTICS_SYSTEM_PROMPT, context)
