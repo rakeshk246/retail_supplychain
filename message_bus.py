@@ -140,8 +140,14 @@ class MessageBus:
             for agent_name in list(self.inbox.keys()):
                 if agent_name != message.sender:
                     self.inbox[agent_name].append(message)
+                    # Cap inbox size to prevent unbounded RAM growth
+                    if len(self.inbox[agent_name]) > 50:
+                        self.inbox[agent_name] = self.inbox[agent_name][-50:]
         else:
             self.inbox[message.recipient].append(message)
+            # Cap inbox size to prevent unbounded RAM growth
+            if len(self.inbox[message.recipient]) > 50:
+                self.inbox[message.recipient] = self.inbox[message.recipient][-50:]
 
         # Trigger subscribers
         for callback in self.subscribers.get(message.msg_type, []):

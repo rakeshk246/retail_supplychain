@@ -1676,49 +1676,59 @@ def main():
 
         # ---- Expander 4: ML Forecast Accuracy ----
         with st.expander("🎯 ML Forecast Accuracy", expanded=False):
-            st.markdown("How well is the LSTM model predicting demand?")
+            st.markdown("How well did the LSTM model predict demand — comparing **stored predictions vs actual realised demand** for each day.")
             _fd = st.session_state.data
-            if _fd and len(_fd) >= 3:
+            # Filter only records where an lstm_prediction was actually stored
+            _valid = [r for r in _fd if r.get('lstm_prediction') is not None]
+            if _valid and len(_valid) >= 3:
                 import numpy as np
-                _ac = [r.get('demand',0) for r in _fd]
-                _fco = st.session_state.fc
-                _pp = []
-                for _pi, _pr in enumerate(_fd):
-                    try: _pp.append(_fco.predict_next())
-                    except: _pp.append(_ac[_pi] if _pi < len(_ac) else 100)
-                _dl2 = [r.get('day',i+1) for i,r in enumerate(_fd)]
-                _aa = np.array(_ac, dtype=float); _pa = np.array(_pp[:len(_ac)], dtype=float)
+                _dl2 = [r.get('day', i+1) for i, r in enumerate(_valid)]
+                _ac  = [r.get('demand', 0)           for r in _valid]   # actual demand that day
+                _pp  = [r.get('lstm_prediction', 0)  for r in _valid]   # what LSTM predicted that same morning
+
+                _aa = np.array(_ac, dtype=float)
+                _pa = np.array(_pp, dtype=float)
                 _er = _aa - _pa
-                _mae = np.mean(np.abs(_er)); _rmse = np.sqrt(np.mean(_er**2))
-                _mpe = np.mean(np.abs(_er / np.maximum(_aa,1))) * 100
-                _acc = max(0, 100 - _mpe)
+                _mae = np.mean(np.abs(_er))
+                _rmse = np.sqrt(np.mean(_er**2))
+                _mpe  = np.mean(np.abs(_er / np.maximum(_aa, 1))) * 100
+                _acc  = max(0, 100 - _mpe)
+
                 _fm1, _fm2, _fm3, _fm4 = st.columns(4)
-                _fm1.metric("📏 MAE", f"{_mae:.1f} units", help="Mean Absolute Error")
-                _fm2.metric("📐 RMSE", f"{_rmse:.1f} units")
-                _fm3.metric("📊 MAPE", f"{_mpe:.1f}%")
-                _fm4.metric("🎯 Accuracy", f"{_acc:.1f}%", delta='Good' if _acc > 85 else 'Needs improvement')
+                _fm1.metric("📏 MAE",      f"{_mae:.1f} units",  help="Mean Absolute Error — average unit miss per day")
+                _fm2.metric("📐 RMSE",     f"{_rmse:.1f} units", help="Root Mean Square Error — penalises large misses more")
+                _fm3.metric("📊 MAPE",     f"{_mpe:.1f}%",       help="Mean Absolute Percentage Error — % deviation from truth")
+                _fm4.metric("🎯 Accuracy", f"{_acc:.1f}%",       delta="Good" if _acc > 85 else "Needs improvement")
+
                 _ffa = go.Figure()
-                _ffa.add_trace(go.Scatter(x=_dl2, y=_ac, name='Actual Demand', line=dict(color='#3b82f6', width=3)))
-                _ffa.add_trace(go.Scatter(x=_dl2, y=_pp[:len(_dl2)], name='Predicted', line=dict(color='#f59e0b', width=2, dash='dash')))
-                _ffa.update_layout(height=320, template='plotly_dark', xaxis_title="Day", yaxis_title="Demand", title="Forecast vs Reality")
+                _ffa.add_trace(go.Scatter(x=_dl2, y=_ac, name="Actual Demand",    line=dict(color="#3b82f6", width=3)))
+                _ffa.add_trace(go.Scatter(x=_dl2, y=_pp, name="LSTM Prediction",  line=dict(color="#f59e0b", width=2, dash="dash")))
+                _ffa.update_layout(height=320, template="plotly_dark",
+                                   xaxis_title="Simulation Day", yaxis_title="Units",
+                                   title="LSTM Forecast vs Actual Demand (same-day comparison)")
                 st.plotly_chart(_ffa, use_container_width=True)
+
                 _fec1, _fec2 = st.columns(2)
                 with _fec1:
                     st.subheader("📊 Error Distribution")
                     _fef = go.Figure()
-                    _fef.add_trace(go.Histogram(x=_er, nbinsx=20, marker_color='#8b5cf6', opacity=0.8))
+                    _fef.add_trace(go.Histogram(x=_er, nbinsx=20, marker_color="#8b5cf6", opacity=0.8))
                     _fef.add_vline(x=0, line_dash="dash", line_color="#22c55e", annotation_text="Perfect")
-                    _fef.update_layout(height=260, template='plotly_dark', xaxis_title="Error", yaxis_title="Count")
+                    _fef.update_layout(height=260, template="plotly_dark",
+                                       xaxis_title="Prediction Error (units)", yaxis_title="Count")
                     st.plotly_chart(_fef, use_container_width=True)
                 with _fec2:
-                    st.subheader("📉 Cumulative Error")
+                    st.subheader("📉 Cumulative Absolute Error")
                     _fef2 = go.Figure()
-                    _fef2.add_trace(go.Scatter(x=_dl2, y=np.cumsum(np.abs(_er)), fill='tozeroy', line=dict(color='#ef4444', width=2)))
-                    _fef2.update_layout(height=260, template='plotly_dark', xaxis_title="Day", yaxis_title="Cumulative |Error|")
+                    _fef2.add_trace(go.Scatter(x=_dl2, y=np.cumsum(np.abs(_er)),
+                                               fill="tozeroy", line=dict(color="#ef4444", width=2)))
+                    _fef2.update_layout(height=260, template="plotly_dark",
+                                        xaxis_title="Day", yaxis_title="Cumulative |Error|")
                     st.plotly_chart(_fef2, use_container_width=True)
-                if _acc >= 90: st.success(f"🏆 **Excellent!** {_acc:.1f}% — LSTM performing very well.")
+
+                if _acc >= 90:   st.success(f"🏆 **Excellent!** {_acc:.1f}% — LSTM performing very well on real Walmart demand.")
                 elif _acc >= 75: st.warning(f"⚠️ **Decent:** {_acc:.1f}% — captures trends but has variance.")
-                else: st.error(f"❌ **Low:** {_acc:.1f}% — model may need more training data.")
+                else:            st.error(  f"❌ **Low:** {_acc:.1f}% — model may need more training data or epochs.")
             else:
                 st.info("▶️ Run at least 3 simulation steps to see forecast accuracy.")
 

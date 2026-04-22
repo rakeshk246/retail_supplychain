@@ -274,6 +274,15 @@ class OrchestratedSupplyChainModel(Model):
                     "Customer orders partially unfulfilled"
                 ]
             )
+            # Mark last warehouse reorder episode as failure so agents learn from it
+            if hasattr(self.warehouse, 'memory'):
+                self.warehouse.memory.store_episode(
+                    situation=f"Stockout: inventory={self.warehouse.inventory}, demand={self.daily_demand}",
+                    decision="Insufficient stock — stockout occurred",
+                    outcome={'success': False, 'shortfall': self.daily_demand - fulfilled},
+                    day=self.current_day,
+                    metadata={'decision_type': 'stockout_failure'}
+                )
         else:
             rec.set_why(
                 reasoning="Sufficient inventory to meet demand",
@@ -508,7 +517,8 @@ class OrchestratedSupplyChainModel(Model):
                     f"Reliability: {self.supplier.reliability:.0%}"
                 ]
             )
-
+            # Track order placed
+            self.data_layer.save_simulation_log({'day': self.current_day, 'agent': 'Supplier', 'message': f'Order placed: {shipped} units'})
             return {'order_result': result if isinstance(result, dict) else {'quantity': result}}
 
     def _node_logistics_scheduling(self, state: SupplyChainState) -> dict:
