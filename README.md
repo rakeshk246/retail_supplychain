@@ -115,5 +115,9 @@ The app will open automatically in your browser at `http://localhost:8501`.
 
 1.  **Advance Time:** Let the LSTM module initialize, then click the **▶️ Next Day** button to simulate one chronologically orchestrated day, or execute them in 10-day batches.
 2.  **Monitor the Map:** Watch operational capacity logic execute across the supply chain tiers on the interactive map.
-3.  **Audit the Agents:** Click the **AI Brain & Comms** tab. Track the live Open-Meteo external intelligence risks, and observe the specific analytic structured cards communicating Triggers, Variables, and Actions between the agents.
-4.  **Inject Chaos:** Force a rapid supply chain breakdown by injecting a `Hurricane` or `Demand Spike`. Watch as the agents consult their ChromaDB memory to dynamically navigate the failure cascade without hitting total stockouts!
+3.  **Inject Chaos:** Force a rapid supply chain breakdown by injecting a `Hurricane` or `Demand Spike` using the top control buttons to witness agent distress recovery.
+4.  **Explore the 4 Control Tabs:** The Simulator UI is divided into four highly detailed insight panels:
+    *   **📊 Live Dashboard:** Your high-level control column. View the daily operational briefing, the active LangGraph execution timeline, the live LSTM Walmart demand forecast, and the 'What Happens Tomorrow' AI prediction panel.
+    *   **🧠 AI Brain & Comms:** The "Explainable AI" nerve center. On the left, watch the External Intelligence Engine score live weather and duckduckgo news risks. On the right, read the structured **Internal Communications Log** showing exact mathematical payloads and reasoning vectors sent between agents.
+    *   **⚔️ AI vs Rules:** A competitive side-by-side benchmarking tab comparing the financial and logistical performance of your active LangGraph AI agents against rigid, traditional baseline algorithms.
+    *   **⚙️ Deep Dive & Logs:** The granular data table backend showcasing full historical simulation matrices, specific anomaly triggers, and technical memory traces.
