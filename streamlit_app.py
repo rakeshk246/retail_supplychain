@@ -548,11 +548,17 @@ def main():
     render_map(model)
 
     # =================== BUTTONS ===================
+    # Check if HITL approval is blocking progression
+    _hitl_blocking = hasattr(model, 'hitl_pending') and model.hitl_pending
     bc = st.columns(6)
     with bc[0]:
-        next_day = st.button("▶️ Next Day", use_container_width=True, type="primary")
+        next_day = st.button("▶️ Next Day", use_container_width=True, type="primary",
+                             disabled=_hitl_blocking,
+                             help="⏸️ Awaiting HITL approval" if _hitl_blocking else None)
     with bc[1]:
-        run_10 = st.button("⏩ Run 10 Days", use_container_width=True)
+        run_10 = st.button("⏩ Run 10 Days", use_container_width=True,
+                           disabled=_hitl_blocking,
+                           help="⏸️ Awaiting HITL approval" if _hitl_blocking else None)
     with bc[2]:
         hurricane = st.button("🌪️ Hurricane!", use_container_width=True)
     with bc[3]:

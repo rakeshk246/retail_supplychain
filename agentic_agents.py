@@ -225,13 +225,18 @@ Always respond with a JSON object containing:
 # ==============================================================================
 
 def _parse_json(text):
-    """Extract JSON from LLM response."""
+    """Extract JSON from LLM response, handling markdown code fences."""
+    if not text:
+        return {}
+    import re
+    # Strip markdown code fences (```json ... ``` or ``` ... ```)
+    text = re.sub(r'```(?:json)?\s*', '', text).strip().rstrip('`').strip()
     try:
         return json.loads(text)
     except json.JSONDecodeError:
         pass
-    import re
-    json_match = re.search(r'\{[^{}]*\}', text, re.DOTALL)
+    # Fallback: extract first {...} block (handles prose + JSON mixed responses)
+    json_match = re.search(r'\{.*?\}', text, re.DOTALL)
     if json_match:
         try:
             return json.loads(json_match.group())
