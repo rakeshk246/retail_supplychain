@@ -1,5 +1,5 @@
 ---
-title: Retail Supply Chain AI Simulator
+title: Retail Supply Chain AI Simulator (v5)
 app_file: streamlit_app.py
 sdk: streamlit
 sdk_version: 1.42.0
@@ -7,7 +7,7 @@ sdk_version: 1.42.0
 
 # 🛍️ AI-Powered Supply Chain Simulator
 
-An advanced agentic supply chain simulation built with **LangGraph**, **Groq LLMs**, **ChromaDB**, and **Streamlit**. This project models a retail supply chain (Supplier → Logistics → Warehouse → Customer) where autonomous AI agents negotiate, communicate, and make decisions to fulfill customer demand while minimizing costs.
+An advanced agentic supply chain simulation built with **LangGraph**, **Groq LLMs**, **ChromaDB**, and **Streamlit**. This project models a retail supply chain (Supplier → Logistics → Warehouse → Customer) where autonomous AI agents negotiate, communicate, and make decisions to fulfill customer demand while minimizing costs during severe market chaos.
 
 ![Streamlit UI Concept](https://img.shields.io/badge/UI-Streamlit-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white)
 ![LLM via Groq](https://img.shields.io/badge/LLM-Groq_%7C_Llama_3-f59e0b?style=for-the-badge)
@@ -17,33 +17,39 @@ An advanced agentic supply chain simulation built with **LangGraph**, **Groq LLM
 
 ## 🌟 Key Features
 
-*   **🤖 Multi-Agent System:** Distinct AI agents (Demand, Warehouse, Logistics, Supplier) with specialized roles.
-*   **🧠 Explainable AI (XAI):** See exactly *what* each agent is thinking and *why* it made a specific decision.
-*   **📚 Vector Memory (ChromaDB):** Agents learn from past successes and failures, recalling past supply chain disruptions to make better future decisions.
-*   **📈 LSTM Forecasting:** Uses a TensorFlow/Keras LSTM model trained on the actual **Walmart M5 forecasting dataset** to predict demand.
-*   **🔀 LangGraph Workflow:** Dynamically routes daily operations into "Normal", "Emergency", or "Crisis" paths depending on the system's state.
-*   **📊 Rich Analytics Dashboard:** 11-tab Streamlit dashboard with real-time tracking of inventory, transit shipments, communication bus, costs, and key performance indicators.
+*   **🤖 Multi-Agent Orchestration:** Distinct AI agents (Demand, Warehouse, Logistics, Supplier) executing in a highly structured, turn-based **LangGraph** cycle.
+*   **🌍 External Intelligence Engine:** The simulation doesn't operate in a vacuum. It pulls live meteorological data via **Open-Meteo** and live geopolitical disruption reports via **DuckDuckGo News** to mathematically gauge supply chain risk.
+*   **🧠 Explainable AI (XAI) Dashboard:** The agents communicate via strict JSON logs that render into distinct Executive Analytic Cards on the Streamlit UI, allowing reviewers to read the Trigger Reason, Numerical Evidence, and Actions taken dynamically.
+*   **📚 Vector Memory (ChromaDB):** Agents learn from past successes and failures, retrieving historical episodes dynamically via zero-shot Context RAG before attempting emergency reorders.
+*   **📈 Machine Learning Forecasts:** Relies on a TensorFlow/Keras LSTM model trained over the authentic **Walmart M5 forecasting dataset (CA_1)** to predict quantitative demand thresholds.
+*   **🌪️ Live Chaos Monkeys:** Includes interactive disruption buttons allowing operators to simulate Hurricanes, Road Blockages, and panic-buy Demand Spikes in real-time.
 
-## 📁 System Architecture
-1.  **Data Layer:** Ingests the Walmart M5 `sales_train_evaluation.csv` dataset (or generates synthetic data).
-2.  **Intelligence Layer:** LSTM model for baseline forecasting; Groq-powered LLMs for strategic decision-making.
-3.  **Agent Layer:** Mesa-inspired agents that use the Message Bus for communication.
-4.  **Orchestration Layer:** LangGraph state machine controls the daily supply chain heartbeat.
-5.  **Presentation Layer:** Streamlit dashboard for interaction and visualization.
+---
+
+## 📁 Core Code Architecture
+Our architecture has been heavily streamlined. The essential files governing the simulation are:
+1.  **`streamlit_app.py`**: The central application entry point and HITL (Human-In-The-Loop) interactive dashboard.
+2.  **`orchestrator.py`**: The LangGraph engine governing the turn-by-turn state machine and agent invocation logic.
+3.  **`agentic_agents.py`**: Defines the Groq LLaMA models powering our supply chain nodes.
+4.  **`news_search.py`**: Handles external intelligence gathering (Weather + News correlation).
+5.  **`forecasting_module.py`**: Deep learning LSTM module predicting baseline market demand.
+6.  **`message_bus.py`**: The JSON payload serialization infrastructure mimicking an enterprise ERP network.
+
+*(Note: In v5, legacy un-orchestrated simulators and experimental React endpoints have been formally deprecated to maintain a highly pristine backend).*
 
 ---
 
 ## 🚀 Getting Started
 
-Follow these instructions to set up and run the simulation on your local machine.
+Follow these instructions to set up and run the simulation on your local Python environment.
 
 ### 1. Prerequisites
 
 You will need the following installed:
-*   **Python 3.9+**
+*   **Python 3.10+**
 *   **Git**
 
-You also need an API key from **Groq** to power the AI agents. You can get one for free at [console.groq.com](https://console.groq.com/).
+You also need an API key from **Groq** to power the high-speed AI agents. You can get one for free at [console.groq.com](https://console.groq.com/).
 
 ### 2. Clone the Repository
 
@@ -52,7 +58,7 @@ git clone <your-repository-url>
 cd Retail_supplychain
 ```
 
-### 3. Set Up a Virtual Environment (Recommended)
+### 3. Set Up a Virtual Environment 
 
 ```bash
 # Create a virtual environment
@@ -85,14 +91,13 @@ pip install -r requirements.txt
     GROQ_MODEL=llama-3.1-8b-instant
     ```
 
-### 6. (Optional/Recommended) Add the M5 Dataset
+### 6. Add the M5 Dataset
 
-For the most realistic simulation, the system expects the actual Walmart M5 dataset. If it cannot find it, it will fall back to generating synthetic data.
-
+For realistic LSTM training, the system expects the actual Walmart M5 dataset. 
 1.  Download the **M5 Forecasting - Accuracy** dataset from Kaggle (you need the `sales_train_evaluation.csv` file).
 2.  Place the file inside the data directory: `data/sales_train_evaluation.csv`.
 
-*(Note: This file is ignored by git because it is over 100MB)*
+*(Note: If the dataset is unfound, the system defaults to generating synthetic approximations).*
 
 ### 7. Run the Simulation
 
@@ -108,22 +113,7 @@ The app will open automatically in your browser at `http://localhost:8501`.
 
 ## 🎮 How to Use the Simulator
 
-1.  **Select a Mode:** Choose between **Agentic (LLM)** for full AI, **Rule-Based** for simple heuristics, or **Hybrid**.
-2.  **Advance Time:** Click the **▶️ Next Day** button to simulate one day of supply chain operations, or specify a number of days to run in batches.
-3.  **Inject Disruptions:** Use the sidebar to trigger Supplier Delays, Delivery Delays, or Demand Spikes to see how the agents react and recover.
-4.  **Explore the Tabs:**
-    *   **📖 Day Briefing:** Full summary of what happened today, including agent actions, shipments, and the LSTM forecast.
-    *   **🧠 Why? (XAI):** Expandable history showing the exact reasoning, contributing factors, and confidence behind every LLM decision.
-    *   **📡 Agent Comms:** View real-time messages sent between agents (e.g., Warehouse negotiating with Supplier).
-    *   **🧠 Memory:** Browse the ChromaDB vector storage to see what scenarios the agents have learned.
-    *   **⚔️ AI vs Rules:** Run a stress-test scenario comparing the LLM agents against standard logic side-by-side.
-
----
-
-## 🧪 Running Tests
-
-The project includes a robust suite of unit tests. You can run them using `pytest` from the root directory:
-
-```bash
-pytest
-```
+1.  **Advance Time:** Let the LSTM module initialize, then click the **▶️ Next Day** button to simulate one chronologically orchestrated day, or execute them in 10-day batches.
+2.  **Monitor the Map:** Watch operational capacity logic execute across the supply chain tiers on the interactive map.
+3.  **Audit the Agents:** Click the **AI Brain & Comms** tab. Track the live Open-Meteo external intelligence risks, and observe the specific analytic structured cards communicating Triggers, Variables, and Actions between the agents.
+4.  **Inject Chaos:** Force a rapid supply chain breakdown by injecting a `Hurricane` or `Demand Spike`. Watch as the agents consult their ChromaDB memory to dynamically navigate the failure cascade without hitting total stockouts!
