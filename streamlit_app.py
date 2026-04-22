@@ -554,11 +554,11 @@ def main():
     with bc[0]:
         next_day = st.button("▶️ Next Day", use_container_width=True, type="primary",
                              disabled=_hitl_blocking,
-                             help="⏸️ Awaiting HITL approval" if _hitl_blocking else None)
+                             help="⏸️ Awaiting HITL approval" if _hitl_blocking else "")
     with bc[1]:
         run_10 = st.button("⏩ Run 10 Days", use_container_width=True,
                            disabled=_hitl_blocking,
-                           help="⏸️ Awaiting HITL approval" if _hitl_blocking else None)
+                           help="⏸️ Awaiting HITL approval" if _hitl_blocking else "")
     with bc[2]:
         hurricane = st.button("🌪️ Hurricane!", use_container_width=True)
     with bc[3]:
