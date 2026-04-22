@@ -64,6 +64,8 @@ class OrchestratedSupplyChainModel(Model):
         self.forecaster = forecaster
         self.data_layer = data_layer
         self.agent_mode = agent_mode
+        # NOTE: RandomActivation scheduler retained for Mesa compatibility/DataCollector
+        # but orchestration is handled by LangGraph — schedule.step() is NOT called
         self.schedule = RandomActivation(self)
         self.current_day = 0
         self.daily_demand = 0
@@ -101,6 +103,7 @@ class OrchestratedSupplyChainModel(Model):
             self.logistics = LogisticsAgent(self)
             self.demand_agent = DemandAgent(self, forecaster)
 
+        # Register with Mesa scheduler (for DataCollector compatibility only)
         for agent in [self.supplier, self.warehouse, self.logistics, self.demand_agent]:
             self.schedule.add(agent)
 

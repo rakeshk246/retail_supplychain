@@ -21,7 +21,11 @@ class KPIEvaluator:
     - Disruption Recovery Time: days to return to >90% fill rate after disruption
     """
 
-    def __init__(self):
+    def __init__(self,
+                 holding_cost_per_unit_day: float = 2.0,
+                 stockout_penalty_per_unit: float = 45.0,
+                 order_fixed_cost: float = 50.0,
+                 order_variable_cost_per_unit: float = 5.0):
         self.metrics = {
             'total_demand': 0,
             'fulfilled_demand': 0,
@@ -32,6 +36,17 @@ class KPIEvaluator:
             'orders_delivered': 0
         }
 
+        # Cost parameters (industry-standard approximations for FMCG retail)
+        self.holding_cost_per_unit_day   = holding_cost_per_unit_day    # $2/unit/day
+        self.stockout_penalty_per_unit   = stockout_penalty_per_unit     # $45/unit missed
+        self.order_fixed_cost            = order_fixed_cost              # $50/order placed
+        self.order_variable_cost_per_unit = order_variable_cost_per_unit # $5/unit ordered
+
+        # Cost accumulators
+        self._total_stockout_cost = 0.0
+        self._total_order_cost    = 0.0
+        self._total_units_ordered = 0
+
         # Daily snapshots for trend analysis
         self.daily_snapshots = []
 
@@ -41,7 +56,7 @@ class KPIEvaluator:
         self._post_disruption_fill_rates = []
 
     def update(self, demand, fulfilled, inventory, stockout,
-               day=None, disruption_active=False):
+               day=None, disruption_active=False, order_qty=None):
         """Update metrics with today's data.
         
         Args:
@@ -56,8 +71,17 @@ class KPIEvaluator:
         self.metrics['fulfilled_demand'] += fulfilled
         if stockout:
             self.metrics['stockouts'] += 1
+            # Accumulate stockout penalty cost
+            shortfall = demand - fulfilled
+            self._total_stockout_cost += shortfall * self.stockout_penalty_per_unit
         self.metrics['total_days'] += 1
         self.metrics['inventory_sum'] += inventory
+
+        # Accumulate order cost if an order was placed this day
+        if order_qty is not None and order_qty > 0:
+            self._total_order_cost += (self.order_fixed_cost +
+                                       order_qty * self.order_variable_cost_per_unit)
+            self._total_units_ordered += order_qty
 
         # Calculate today's fill rate
         today_fill_rate = (fulfilled / max(demand, 1)) * 100
@@ -123,6 +147,12 @@ class KPIEvaluator:
         else:
             avg_recovery_time = 0
 
+        # Cost calculations
+        holding_cost   = round(avg_inventory * self.holding_cost_per_unit_day * self.metrics['total_days'], 2)
+        stockout_cost  = round(self._total_stockout_cost, 2)
+        order_cost     = round(self._total_order_cost, 2)
+        total_sc_cost  = round(holding_cost + stockout_cost + order_cost, 2)
+
         return {
             'Fill Rate (%)': round(fill_rate, 2),
             'Stock-out Rate (%)': round(stockout_rate, 2),
@@ -131,7 +161,12 @@ class KPIEvaluator:
             'Customer Satisfaction': round(customer_satisfaction, 2),
             'Avg Recovery Time (days)': round(avg_recovery_time, 1),
             'Total Disruptions': len(self.disruption_events),
-            'Total Days': self.metrics['total_days']
+            'Total Days': self.metrics['total_days'],
+            # Financial KPIs
+            'Holding Cost ($)': holding_cost,
+            'Stockout Cost ($)': stockout_cost,
+            'Order Cost ($)': order_cost,
+            'Total SC Cost ($)': total_sc_cost,
         }
 
     def get_daily_trend(self, metric='fill_rate'):
@@ -225,3 +260,7 @@ class KPIEvaluator:
         self.disruption_events = []
         self._active_disruption = None
         self._post_disruption_fill_rates = []
+        # Reset cost accumulators
+        self._total_stockout_cost = 0.0
+        self._total_order_cost    = 0.0
+        self._total_units_ordered = 0

@@ -291,14 +291,16 @@ class AgenticSupplierAgent(Agent):
             metadata={'decision_type': 'order_fulfillment'}
         )
 
-        # Send order confirmation
+        # Proactively broadcast current capacity status so all agents plan accordingly
         if isinstance(result, dict) and result.get('quantity', 0) > 0:
             qty = result['quantity']
             lt = result.get('lead_time', self.lead_time)
+            remaining_capacity = self.capacity - qty
+            utilization_pct = (qty / self.capacity) * 100
             self.bus.send_direct("Supplier", "Warehouse", "order_confirmation", {
                 'order_qty': qty,
                 'status': 'processing',
-                'available_capacity': self.capacity - qty,
+                'available_capacity': remaining_capacity,
                 'reasoning': self.last_reasoning if self.last_reasoning else "Sufficient capacity to fulfill request.",
                 'action_requested': f"Acknowledge order and prepare receiving docks.",
                 'day': self.model.current_day
@@ -311,6 +313,19 @@ class AgenticSupplierAgent(Agent):
                 'action_requested': f"Schedule urgent transport slot before 18:00 on Day {self.model.current_day + lt}.",
                 'day': self.model.current_day
             })
+            # I3: Proactive capacity alert — all agents now know supplier headroom
+            self.bus.broadcast_alert("Supplier", "capacity_status", {
+                'capacity_total': self.capacity,
+                'capacity_used_this_order': qty,
+                'capacity_remaining': remaining_capacity,
+                'utilization_pct': round(utilization_pct, 1),
+                'reliability': self.reliability,
+                'status': 'WARNING: Near capacity' if utilization_pct > 80 else 'Normal',
+                'day': self.model.current_day
+            })
+            if utilization_pct > 80:
+                self.model.log_event("Supplier",
+                    f"⚠️ Capacity warning: {utilization_pct:.0f}% utilized — remaining {remaining_capacity} units")
 
         return result
 
@@ -843,6 +858,16 @@ class AgenticDemandAgent(Agent):
         else:
             variance = base_prediction * 0.2
             demand = max(1, int(base_prediction + np.random.normal(0, variance)))
+
+        # I2: Enforce intelligence demand_adjustment numerically (not just as text in prompt)
+        if self.last_analysis:
+            adj = self.last_analysis.get('demand_adjustment', 1.0)
+            if adj and abs(adj - 1.0) > 0.05:  # Only act on meaningful adjustments (>5%)
+                adjusted = int(demand * adj)
+                self.model.log_event("Intelligence",
+                    f"📊 Demand adjusted ×{adj:.2f} ({demand} → {adjusted}) "
+                    f"based on {self.last_analysis.get('risk_level','?')} risk level")
+                demand = max(1, adjusted)
 
         self.model.daily_demand = demand
         self.recent_demands.append(demand)
