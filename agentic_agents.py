@@ -95,37 +95,59 @@ class LLMEngine:
         return self.llm is not None and not self.rate_limited
 
     def reason(self, system_prompt: str, user_prompt: str) -> Optional[str]:
+        """U2: LLM call with exponential backoff retry for transient errors.
+
+        - Hard Groq rate-limit (429 / quota): raises GroqRateLimitError immediately
+        - Transient server error: retries up to 2 times (5s, 10s delays)
+        - All other failures: returns None (rule-based fallback kicks in)
+        """
+        import time
+
         if self.rate_limited:
             raise GroqRateLimitError(self.rate_limit_message)
 
         if not self.llm:
             return None
 
-        try:
-            messages = [
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=user_prompt)
-            ]
-            response = self.llm.invoke(messages)
-            self.call_count += 1
-            if hasattr(response, 'usage_metadata') and response.usage_metadata:
-                self.total_tokens += response.usage_metadata.get('total_tokens', 0)
-            return response.content
-        except Exception as e:
-            error_str = str(e).lower()
-            # Detect rate limit errors from Groq
-            if any(kw in error_str for kw in ['rate_limit', 'rate limit', 'ratelimit',
-                                                'too many requests', '429', 'quota',
-                                                'tokens per', 'requests per']):
-                self.rate_limited = True
-                self.rate_limit_message = f"Groq API rate limit exceeded: {e}"
-                print(f"\n{'='*60}")
-                print(f"GROQ RATE LIMIT EXCEEDED!")
-                print(f"Error: {e}")
-                print(f"{'='*60}\n")
-                raise GroqRateLimitError(self.rate_limit_message)
-            print(f"LLM call failed: {e}")
-            return None
+        max_retries = 2
+        for attempt in range(max_retries + 1):
+            try:
+                messages = [
+                    SystemMessage(content=system_prompt),
+                    HumanMessage(content=user_prompt)
+                ]
+                response = self.llm.invoke(messages)
+                self.call_count += 1
+                if hasattr(response, 'usage_metadata') and response.usage_metadata:
+                    self.total_tokens += response.usage_metadata.get('total_tokens', 0)
+                return response.content
+
+            except Exception as e:
+                error_str = str(e).lower()
+
+                # Hard rate limit — set flag, raise immediately, no retry
+                if any(kw in error_str for kw in ['rate_limit', 'rate limit', 'ratelimit',
+                                                    'too many requests', '429', 'quota',
+                                                    'tokens per', 'requests per']):
+                    self.rate_limited = True
+                    self.rate_limit_message = f"Groq API rate limit exceeded: {e}"
+                    print(f"\n{'='*60}")
+                    print(f"GROQ RATE LIMIT EXCEEDED!")
+                    print(f"Error: {e}")
+                    print(f"{'='*60}\n")
+                    raise GroqRateLimitError(self.rate_limit_message)
+
+                # Transient error — retry with backoff
+                if attempt < max_retries:
+                    wait = 5 * (2 ** attempt)   # 5s, then 10s
+                    print(f"LLM transient error (attempt {attempt+1}/{max_retries}), "
+                          f"retrying in {wait}s: {e}")
+                    time.sleep(wait)
+                    continue
+
+                # All retries exhausted — fall back silently
+                print(f"LLM call failed after {max_retries} retries: {e}")
+                return None
 
     def get_stats(self):
         return {
@@ -882,7 +904,11 @@ class AgenticDemandAgent(Agent):
         )
 
         # Share forecast with other agents
+        # U4: Reduce confidence during anomaly / spike
         confidence = llm_decision.get('confidence', 0.85) if llm_decision else 0.85
+        if getattr(self.model, '_demand_spike_remaining', 0) > 0:
+            confidence = min(confidence, 0.55)  # Lowered: spike = higher uncertainty
+            self.model.log_event("Demand", "Forecast confidence reduced to 55% during demand anomaly")
         last_fc = getattr(self, 'last_forecast', demand)
         pct_change = ((demand - last_fc) / max(last_fc, 1)) * 100
         
@@ -915,6 +941,29 @@ class AgenticDemandAgent(Agent):
             f"Inventory: {self.model.warehouse.inventory}\n\n"
             f"{memory_context}\n\n{bus_context}"
         )
+
+        # U4: Inject anomaly alert when demand spike is active
+        if getattr(self.model, '_demand_spike_remaining', 0) > 0:
+            spike_mult = getattr(self.model, '_demand_spike_multiplier', 1.6)
+            days_left = self.model._demand_spike_remaining
+            context += (
+                f"\n\n*** DEMAND ANOMALY ACTIVE ***\n"
+                f"Current demand is {spike_mult:.0%} above baseline (spike multiplier).\n"
+                f"Spike has {days_left} day(s) remaining.\n"
+                f"URGENT: Recommend immediate over-stock order to avoid stockout."
+            )
+
+        # U4: Inject disruption cause context from MessageBus
+        disruption_msgs = self.bus.get_messages('Demand', 'disruption_alert', limit=5)
+        for dmsg in disruption_msgs[-2:]:  # show most recent 2
+            reason = dmsg.content.get('reason', 'unknown')
+            days_rem = dmsg.content.get('days_remaining', '?')
+            sender = dmsg.sender
+            context += (
+                f"\n\n*** SUPPLY DISRUPTION: {reason.upper()} ***\n"
+                f"{sender} is OFFLINE for {days_rem} more day(s) due to {reason}.\n"
+                f"Demand may increase or be unserviceable. Adjust forecast confidence accordingly."
+            )
 
         # Add external intelligence context (weather + news)
         if self.intel and self.last_analysis:

@@ -595,12 +595,16 @@ def main():
 
     if hurricane:
         # Hurricane disrupts BOTH supplier and logistics (regional impact)
-        model.inject_disruption('supplier', 4)
-        model.inject_disruption('logistics', 3)
-        model.log_event('Disruption', '🌪️ Hurricane! Supplier disrupted 4 days + Logistics disrupted 3 days')
+        model.inject_disruption('supplier', 4, reason='hurricane')
+        model.inject_disruption('logistics', 3, reason='hurricane')
+        # U7: Hurricane also drives demand surge (+30%) for 2 days — disasters cause hoarding
+        model._demand_spike_remaining = getattr(model, '_demand_spike_remaining', 0) + 2
+        model._demand_spike_multiplier = 1.3
+        model.log_event('Disruption', 'Hurricane! Supplier 4d + Logistics 3d disrupted + 30% demand surge 2 days')
         st.rerun()
     if road:
-        model.inject_disruption('logistics', 3)
+        model.inject_disruption('logistics', 3, reason='road_block')
+        model.log_event('Disruption', 'Road Block! Logistics disrupted 3 days')
         st.rerun()
     if spike:
         # Correctly simulate demand spike: set a 3-day multiplier on the model
@@ -681,7 +685,46 @@ def main():
                 </h1>
             </div>""", unsafe_allow_html=True)
 
-            # ---- 2. Status banner ----
+            # ---- 2. Status banner + U6 Active Incidents Panel ----
+
+            # U6: Build Active Incidents list
+            incidents = []
+            for _atype, _end_day in model.disruption_schedule.items():
+                _rem = max(0, _end_day - model.current_day)
+                if _rem > 0:
+                    _icon = "🌪️" if _atype == "supplier" else "🚧"
+                    _cause = getattr(model, f'_disruption_reason_{_atype}', '')
+                    _label = f"{_icon} **{_atype.title()}** offline — {_rem} day(s) remaining"
+                    if _cause:
+                        _label += f" *(cause: {_cause})*"
+                    incidents.append((_atype, _rem, _label))
+
+            if incidents:
+                # Calculate projected stockout
+                _daily = max(model.daily_demand, 1)
+                _inv = model.warehouse.inventory
+                _pending = sum(s.get('qty', 0) for s in model.logistics.shipments)
+                _proj_days = (_inv + _pending) / _daily
+                _stockout_day = model.current_day + int(_proj_days)
+                _urgency_color = "#ef4444" if _proj_days < 3 else "#f59e0b" if _proj_days < 7 else "#f97316"
+
+                _incident_rows = "".join([
+                    f"<div style='margin:4px 0;font-size:13px'>{_l[2]}</div>" for _l in incidents
+                ])
+                st.markdown(f"""
+                <div style='background:rgba(239,68,68,0.12);border:1.5px solid {_urgency_color};
+                            border-radius:12px;padding:16px 20px;margin:10px 0 8px 0'>
+                    <div style='font-size:15px;font-weight:700;color:{_urgency_color};margin-bottom:8px'>
+                        ⚠️ ACTIVE INCIDENTS ({len(incidents)})
+                    </div>
+                    {_incident_rows}
+                    <div style='margin-top:10px;font-size:13px;color:#fbbf24;font-weight:600'>
+                        📉 Projected stockout: Day {_stockout_day}
+                        &nbsp;({int(_proj_days)} days remaining supply)
+                    </div>
+                </div>""", unsafe_allow_html=True)
+
+            # Regular fulfillment banner
             if fulfilled >= demand:
                 _bg = "rgba(34,197,94,0.15)"; _bd = "#22c55e"; _tc = "#86efac"
                 _msg = f"✅ All orders fulfilled! Shipped {fulfilled}/{demand} units. Stock: {inv_before} → {inv_after}"

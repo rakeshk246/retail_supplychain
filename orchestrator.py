@@ -126,6 +126,11 @@ class OrchestratedSupplyChainModel(Model):
         self.hitl_enabled = True
         self.last_order_qty = 0    # Track last order quantity for HITL
 
+        # U3 fix: Pre-register all agent inboxes so Day-1 broadcasts reach everyone.
+        # Without this, broadcast to '*' only goes to inboxes already in bus.inbox.keys()
+        for _agent_name in ['Supplier', 'Warehouse', 'Logistics', 'Demand']:
+            _ = self.bus.get_messages(_agent_name, limit=0)  # Creates the inbox entry
+
     # =========================================================================
     # LangGraph Workflow Definition
     # =========================================================================
@@ -187,21 +192,44 @@ class OrchestratedSupplyChainModel(Model):
     # =========================================================================
 
     def _route_by_inventory(self, state: SupplyChainState) -> str:
-        """Route based on inventory level and disruption status."""
+        """U1: Proactive disruption-aware routing.
+
+        Escalation logic:
+          CRISIS   → stockout now, OR will stockout before supplier recovers
+          EMERGENCY→ any supply node disrupted, OR below reorder point
+          NORMAL   → all nodes up, stock healthy
+        """
         inv = state['inventory']
         demand = state['demand']
         supplier_down = state['supplier_status'] == 'disrupted'
         logistics_down = state['logistics_status'] == 'disrupted'
 
-        # CRISIS: stockout or near-zero with disruptions
-        if inv <= 0 or (inv < demand and (supplier_down or logistics_down)):
+        # -- CRISIS tier --
+        if inv <= 0:
+            return "crisis"
+        if inv < demand and (supplier_down or logistics_down):
             return "crisis"
 
-        # EMERGENCY: below reorder point
+        # Proactive stockout projection: will we run out before supplier recovers?
+        if supplier_down:
+            daily_avg = max(demand, 1)
+            days_of_stock = inv / daily_avg
+            supplier_days_out = max(
+                0, self.disruption_schedule.get('supplier', 0) - self.current_day
+            )
+            lead_time = getattr(self.supplier, 'lead_time', 2)
+            if days_of_stock < (supplier_days_out + lead_time):
+                return "crisis"   # Will stockout before supplier can ship again
+
+        # -- EMERGENCY tier --
+        # Any active supply-node disruption → always escalate (U1 core fix)
+        if supplier_down or logistics_down:
+            return "emergency"
+
         if inv < self.warehouse.reorder_point:
             return "emergency"
 
-        # NORMAL
+        # -- NORMAL --
         return "normal"
 
     def _route_after_supplier(self, state: SupplyChainState) -> str:
@@ -683,22 +711,49 @@ class OrchestratedSupplyChainModel(Model):
         self.event_log.append(event)
         self.data_layer.save_simulation_log(event)
 
-    def inject_disruption(self, agent_type, duration=3):
+    def inject_disruption(self, agent_type, duration=3, reason='manual'):
+        """Inject a disruption and broadcast it to all agents via MessageBus.
+
+        U3: Logistics now broadcasts its own disruption_alert (supplier already did this).
+        U5: Broadcasts include the reason (hurricane / road_block / manual) so agents
+            can reason differently about cause.
+        """
         end_day = self.current_day + duration
         self.disruption_schedule[agent_type] = end_day
+
         if agent_type == 'supplier':
             self.supplier.status = 'disrupted'
-            self.log_event('Disruption', f"Supplier DISRUPTED for {duration} days")
+            self.log_event('Disruption', f"Supplier DISRUPTED for {duration} days (reason: {reason})")
+            # Supplier broadcast already done inside AgenticSupplierAgent; also add bus here
+            self.bus.broadcast_alert("Supplier", "disruption_alert", {
+                'status': 'disrupted',
+                'recovery_day': end_day,
+                'days_remaining': duration,
+                'reason': reason,
+                'day': self.current_day
+            })
+
         elif agent_type == 'logistics':
             self.logistics.status = 'disrupted'
-            self.log_event('Disruption', f"Logistics DISRUPTED for {duration} days")
+            self.log_event('Disruption', f"Logistics DISRUPTED for {duration} days (reason: {reason})")
             # Retroactively delay ALL in-transit shipments (real disruptions affect pipeline)
             delay_days = 2
             for shipment in self.logistics.shipments:
                 shipment['arrival_day'] += delay_days
             if self.logistics.shipments:
                 self.log_event('Disruption',
-                    f"⚠️ {len(self.logistics.shipments)} in-transit shipment(s) delayed +{delay_days} days")
+                    f"  {len(self.logistics.shipments)} in-transit shipment(s) delayed +{delay_days} days")
+
+            # U3: Logistics broadcasts its own disruption alert to all agents
+            self.bus.broadcast_alert("Logistics", "disruption_alert", {
+                'status': 'disrupted',
+                'recovery_day': end_day,
+                'days_remaining': duration,
+                'delay_days': delay_days,
+                'reason': reason,
+                'day': self.current_day
+            })
+
         return duration
 
     def _check_disruption_recovery(self):
