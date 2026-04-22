@@ -13,6 +13,19 @@ chroma_db/
 
 # Large Data Files
 data/*.zip
+data/*.csv
+*.csv
+
+# Node / Frontend
+frontend/node_modules/
+node_modules/
+
+# Research Papers (large PDFs — keep out of git)
+research papers/
+"research papers/"
+
+# Media artifacts
+*.webp
 
 # IDEs
 .idea/
@@ -21,3 +34,4 @@ data/*.zip
 # Other temporary files
 agentic_results.json
 xai_audit_trail.json
+baseline.json
