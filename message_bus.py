@@ -185,6 +185,31 @@ class MessageBus:
         """Clear an agent's inbox."""
         self.inbox[agent_name] = []
 
+    def prune_old_messages(self, current_day: int, max_age: int = 3):
+        """FIX 4 — Remove messages older than max_age days from all inboxes.
+
+        Without this, a Day-1 "low_stock" alert stays in every agent's inbox
+        forever, polluting LLM context on Day 30 even if stock is healthy.
+        Called automatically by OrchestratedSupplyChainModel.step() each day.
+
+        Args:
+            current_day: The simulation's current day number.
+            max_age: Messages older than this many days are pruned (default 3).
+        """
+        for agent_name in list(self.inbox.keys()):
+            before = len(self.inbox[agent_name])
+            self.inbox[agent_name] = [
+                m for m in self.inbox[agent_name]
+                if current_day - m.content.get('day', current_day) <= max_age
+                if isinstance(m.content, dict)
+            ] + [
+                m for m in self.inbox[agent_name]
+                if not isinstance(m.content, dict)
+            ]
+            pruned = before - len(self.inbox[agent_name])
+            if pruned > 0 and self.history:
+                pass  # Silent prune — no log noise
+
     def broadcast_alert(self, sender: str, alert_type: str, details: dict):
         """Convenience: broadcast an alert to all agents."""
         msg = Message(

@@ -62,14 +62,8 @@ def run_one_step(model, kpi_eval, sim_data):
 
     # This will raise GroqRateLimitError if rate limit hit in agentic mode
     model.step()
-
-    # Apply demand spike multiplier if active (set by Demand Spike! button)
-    if getattr(model, '_demand_spike_remaining', 0) > 0:
-        spike_mult = getattr(model, '_demand_spike_multiplier', 1.6)
-        model.daily_demand = int(model.daily_demand * spike_mult)
-        model._demand_spike_remaining -= 1
-        if model._demand_spike_remaining == 0:
-            model.log_event('Disruption', '📈 Demand spike ended — returned to normal demand')
+    # NOTE: Demand spike is now applied inside orchestrator._node_forecast_demand()
+    # so warehouse.fulfill_demand() correctly sees the spiked demand before fulfilling.
 
     fulfilled = min(model.daily_demand, inv_before)
     stockout = fulfilled < model.daily_demand
@@ -77,7 +71,8 @@ def run_one_step(model, kpi_eval, sim_data):
     kpi_eval.update(
         model.daily_demand, fulfilled, model.warehouse.inventory,
         stockout, day=model.current_day,
-        disruption_active=bool(model.disruption_schedule))
+        disruption_active=bool(model.disruption_schedule),
+        order_qty=getattr(model, '_last_step_order_qty', 0))  # FIX 1 — pass order qty for cost KPIs
 
     # Get XAI decisions for this day
     decisions = model.xai.get_decision_chain(model.current_day)
@@ -712,6 +707,18 @@ def main():
             for col, (n, icon) in zip(mc, kpi_items):
                 with col:
                     st.metric(f"{icon} {n}", f"{kpis.get(n, 0)}")
+
+            # ---- FIX 2: Financial KPIs row ----
+            st.markdown("##### 💰 Supply Chain Financial Cost")
+            fc1, fc2, fc3, fc4 = st.columns(4)
+            fc1.metric("🏥 Holding Cost",  f"${kpis.get('Holding Cost ($)', 0):,.0f}",
+                       help="Cost of storing unsold inventory ($2/unit/day)")
+            fc2.metric("❌ Stockout Cost",  f"${kpis.get('Stockout Cost ($)', 0):,.0f}",
+                       help="Lost revenue from unfulfilled orders ($45/unit missed)")
+            fc3.metric("📦 Order Cost",     f"${kpis.get('Order Cost ($)', 0):,.0f}",
+                       help="Fixed + variable cost per order placed ($50 + $5/unit)")
+            fc4.metric("💸 Total SC Cost",  f"${kpis.get('Total SC Cost ($)', 0):,.0f}",
+                       help="Sum of all holding, stockout, and ordering costs")
 
             # ---- 4. Inventory Over Time + Stock Health gauge ----
             if st.session_state.data:
@@ -1548,6 +1555,24 @@ def main():
                     v = rk.get(n, 0)
                     d = v - ak.get(n, 0)
                     st.metric(n, f"{v}", delta=f"{d:+.1f} vs AI" if d != 0 else "Same")
+
+            # FIX 2 — Financial cost comparison
+            st.markdown("##### 💰 Total Supply Chain Cost")
+            ai_cost = ak.get('Total SC Cost ($)', 0)
+            rb_cost = rk.get('Total SC Cost ($)', 0)
+            cost_diff = rb_cost - ai_cost
+            cc1, cc2, cc3 = st.columns(3)
+            cc1.metric("🤖 AI Total SC Cost",    f"${ai_cost:,.0f}")
+            cc2.metric("📐 Rules Total SC Cost", f"${rb_cost:,.0f}",
+                       delta=f"${cost_diff:+,.0f} vs AI", delta_color="inverse")
+            if cost_diff > 0:
+                cc3.metric("💰 AI Saves", f"${cost_diff:,.0f}",
+                           delta="AI is cheaper", delta_color="normal")
+            elif cost_diff < 0:
+                cc3.metric("💰 Rules Save", f"${-cost_diff:,.0f}",
+                           delta="Rules cheaper this run", delta_color="inverse")
+            else:
+                cc3.metric("🤝 Cost Tie", "$0", delta="Equal cost")
 
             # Chart
             ai_df = pd.DataFrame(ai_d)

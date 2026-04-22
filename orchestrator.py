@@ -218,6 +218,18 @@ class OrchestratedSupplyChainModel(Model):
         """Node 1: Generate demand forecast."""
         self.demand_agent.step()
 
+        # FIX 3 — Apply demand spike INSIDE the workflow (before fulfillment)
+        # This ensures warehouse.fulfill_demand() uses the spiked demand value.
+        if getattr(self, '_demand_spike_remaining', 0) > 0:
+            spike_mult = getattr(self, '_demand_spike_multiplier', 1.6)
+            self.daily_demand = max(1, int(self.daily_demand * spike_mult))
+            self._demand_spike_remaining -= 1
+            self.log_event('Disruption',
+                f'📈 Demand spike: {self.daily_demand} units '
+                f'({spike_mult:.0%} surge, {self._demand_spike_remaining} days remaining)')
+            if self._demand_spike_remaining == 0:
+                self.log_event('Disruption', '📈 Demand spike ended — returning to normal demand')
+
         # XAI record
         rec = self.xai.create_record("Demand", "forecast", self.current_day)
         rec.action = f"Forecast demand = {self.daily_demand}"
@@ -520,7 +532,8 @@ class OrchestratedSupplyChainModel(Model):
                     f"Reliability: {self.supplier.reliability:.0%}"
                 ]
             )
-            # Track order placed
+            # FIX 1 — Track order qty so KPI evaluator can compute order cost
+            self._last_step_order_qty = shipped
             self.data_layer.save_simulation_log({'day': self.current_day, 'agent': 'Supplier', 'message': f'Order placed: {shipped} units'})
             return {'order_result': result if isinstance(result, dict) else {'quantity': result}}
 
@@ -590,6 +603,10 @@ class OrchestratedSupplyChainModel(Model):
     def step(self):
         """Execute one simulation day via LangGraph."""
         self.current_day += 1
+        # FIX 1 — Reset per-step order tracking (set by _node_supplier_decision when order ships)
+        self._last_step_order_qty = 0
+        # FIX 4 — Prune stale inbox messages (>3 days old) to prevent Day-1 alerts polluting Day-30 LLM context
+        self.bus.prune_old_messages(self.current_day, max_age=3)
         self._check_disruption_recovery()
 
         # Build initial state
