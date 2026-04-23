@@ -518,7 +518,7 @@ def main():
         st.session_state.hist = st.session_state.dl.load_real_data()
         st.session_state.fc = DemandForecaster(method='lstm')
         with st.spinner("🧠 Training AI forecaster on Walmart M5 data..."):
-            st.session_state.fc.train(st.session_state.hist, epochs=30)
+            st.session_state.fc.train(st.session_state.hist, epochs=5)
         st.session_state.mode = 'agentic'
         st.session_state.model = init_model(st.session_state.dl, st.session_state.fc, 'agentic')
         st.session_state.kpi = KPIEvaluator()
